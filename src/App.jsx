@@ -110,7 +110,7 @@ export default function App() {
   if (!auth) {
     return (
       <ThemeProvider>
-        <Auth onLogin={login} />
+        <Auth />
       </ThemeProvider>
     );
   }

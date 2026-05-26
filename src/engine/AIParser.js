@@ -51,7 +51,12 @@ export async function aiParse(text, data, apiKey) {
 
   const json = await response.json();
   // The Netlify function returns { content: '<raw JSON string>' }; parse it.
-  const parsed = typeof json.content === 'string' ? JSON.parse(json.content) : json;
+  let parsed;
+  try {
+    parsed = typeof json.content === 'string' ? JSON.parse(json.content) : json;
+  } catch {
+    throw new AIParserError('Invalid response from AI service', 500);
+  }
 
   const existingIncome = new Set(categories.income);
   const existingExpense = new Set(categories.expense);
@@ -75,5 +80,6 @@ export async function aiParse(text, data, apiKey) {
 }
 
 export function isApiKeyConfigured(apiKey) {
+  // Format check only — actual key validity is verified when the Netlify function calls Anthropic
   return Boolean(apiKey && apiKey.startsWith('sk-ant-'));
 }

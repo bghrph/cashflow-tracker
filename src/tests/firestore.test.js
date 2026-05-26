@@ -47,12 +47,12 @@ describe('firestore data layer', () => {
     expect(await loadData('uid1')).toEqual({ transactions: [] });
   });
 
-  it('saveData calls setDoc with updatedAt timestamp', async () => {
+  it('saveData calls setDoc with updatedAt timestamp and preserves data', async () => {
     setDoc.mockResolvedValueOnce(undefined);
     await saveData('uid1', { transactions: [] });
     expect(setDoc).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ updatedAt: 'SERVER_TIMESTAMP' })
+      { transactions: [], updatedAt: 'SERVER_TIMESTAMP' }
     );
   });
 

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
+    "firebase": "^12.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7"
@@ -24,6 +25,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "dotenv": "^16.4.7",
     "jsdom": "^25.0.1",
+    "netlify-cli": "^26.0.2",
     "start-server-and-test": "^3.0.5",
     "testcafe": "^3.7.4",
     "vite": "^5.4.11",

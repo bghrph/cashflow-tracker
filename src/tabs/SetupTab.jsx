@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CURRENCIES, getCurrency } from '../lib/currencies.js';
 import { flattenCategories } from '../lib/categories.js';
 import CategoryGroup from '../components/CategoryGroup.jsx';
@@ -12,6 +12,7 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [keySaving, setKeySaving] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
+  const [keyError, setKeyError] = useState('');
   const allExpense = flattenCategories(data.expenseGroups);
   const [selectedCat, setSelectedCat] = useState(allExpense[0] || '');
   const bt = data.budgetTargets[selectedCat] || {
@@ -28,18 +29,28 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
   const symbol = getCurrency(data.primaryCurrency).symbol;
 
   const saveApiKey = async () => {
-    if (!uid) return;
+    if (!uid) {
+      setKeyError('Not signed in. Please refresh and try again.');
+      return;
+    }
     setKeySaving(true);
     setKeySaved(false);
+    setKeyError('');
     try {
       await saveProfile(uid, { anthropicApiKey: keyInput.trim() });
       onApiKeyChange(keyInput.trim());
       setKeySaved(true);
       setTimeout(() => setKeySaved(false), 3000);
+    } catch (err) {
+      setKeyError(err?.message || 'Failed to save. Try again.');
     } finally {
       setKeySaving(false);
     }
   };
+
+  useEffect(() => {
+    setKeyInput(apiKey || '');
+  }, [apiKey]);
 
   const addGroup = (type) => {
     const v = (type === 'income' ? newIncomeGroup : newExpenseGroup).trim();
@@ -283,6 +294,11 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
             {keySaving ? 'Saving…' : keySaved ? 'Saved ✓' : 'Save'}
           </button>
         </div>
+        {keyError && (
+          <p style={{ fontSize: 11, color: 'var(--negative)', marginTop: 6 }}>
+            {keyError}
+          </p>
+        )}
         {keyInput && !keyInput.startsWith('sk-ant-') && (
           <p style={{ fontSize: 11, color: 'var(--negative)', marginTop: 6 }}>
             Key should start with <code>sk-ant-</code>

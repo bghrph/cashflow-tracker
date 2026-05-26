@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { ThemeProvider } from './lib/theme.jsx';
-import { loadData, saveData, loadAuth, saveAuth, STORAGE_KEYS } from './lib/storage.js';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth as firebaseAuth } from './lib/firebase.js';
+import { loadProfile, saveProfile, loadData as loadFirestoreData, saveData as saveFirestoreData, loadLegacyData, clearLegacyData } from './lib/firestore.js';
 import { migrate, DEFAULT_STATE } from './lib/migrate.js';
 import { generateNotifications } from './lib/notifications.js';
 import { flattenCategories } from './lib/categories.js';
@@ -17,22 +19,70 @@ export default function App() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState(null);
+  const [anthropicApiKey, setAnthropicApiKey] = useState('');
 
   useEffect(() => {
-    Promise.all([loadAuth(), loadData()]).then(([a, d]) => {
-      setAuth(a || null);
-      if (a) setData(d ? migrate(d) : { ...DEFAULT_STATE });
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setAuth(null);
+        setUid(null);
+        setAnthropicApiKey('');
+        setData(null);
+        setLoading(false);
+        return;
+      }
+
+      const profile = await loadProfile(firebaseUser.uid);
+      const userAuth = {
+        name: firebaseUser.displayName || firebaseUser.email,
+        email: firebaseUser.email,
+        photoURL: firebaseUser.photoURL || null,
+      };
+
+      if (!profile) {
+        // First login — create profile
+        await saveProfile(firebaseUser.uid, {
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email,
+          photoURL: firebaseUser.photoURL || null,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      setAuth(userAuth);
+      setUid(firebaseUser.uid);
+      setAnthropicApiKey(profile?.anthropicApiKey || '');
+
+      // Check for existing Firestore data
+      const firestoreData = await loadFirestoreData(firebaseUser.uid);
+      if (firestoreData) {
+        setData(migrate(firestoreData));
+      } else {
+        // First login migration: check localStorage
+        const legacy = loadLegacyData();
+        if (legacy) {
+          const migrated = migrate(legacy);
+          await saveFirestoreData(firebaseUser.uid, migrated);
+          clearLegacyData();
+          setData(migrated);
+        } else {
+          setData({ ...DEFAULT_STATE });
+        }
+      }
+
       setLoading(false);
     });
+    return unsubscribe;
   }, []);
 
   const update = useCallback((fn) => {
     setData((prev) => {
       const next = typeof fn === 'function' ? fn(prev) : { ...prev, ...fn };
-      saveData(next);
+      if (uid) saveFirestoreData(uid, next);
       return next;
     });
-  }, []);
+  }, [uid]);
 
   // Auto-fill recurring transactions on month change
   useEffect(() => {
@@ -79,16 +129,14 @@ export default function App() {
     }
   }, [data?.recurringTemplates, data?.lastAutoFillMonth, data?.nextId, update]);
 
-  const login = (u) => {
-    setAuth(u);
-    saveAuth(u);
-    loadData().then((d) => setData(d ? migrate(d) : { ...DEFAULT_STATE }));
-  };
-  const logout = () => {
+  const logout = useCallback(async () => {
+    await signOut(firebaseAuth);
     setAuth(null);
-    saveAuth(null);
+    setUid(null);
+    setAnthropicApiKey('');
+    setData(null);
     setTab('overview');
-  };
+  }, []);
 
   const incomeCategories = useMemo(
     () => (data ? flattenCategories(data.incomeGroups) : []),
@@ -125,9 +173,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <Shell auth={auth} data={data} tab={tab} setTab={setTab} notifications={notifications} onLogout={logout}>
-        {tab === 'setup' && <SetupTab data={data} update={update} />}
+        {tab === 'setup' && <SetupTab data={data} update={update} uid={uid} anthropicApiKey={anthropicApiKey} onApiKeyChange={setAnthropicApiKey} />}
         {tab === 'transactions' && (
-          <TransactionsTab data={data} update={update} incomeCategories={incomeCategories} expenseCategories={expenseCategories} />
+          <TransactionsTab data={data} update={update} incomeCategories={incomeCategories} expenseCategories={expenseCategories} apiKey={anthropicApiKey} />
         )}
         {tab === 'overview' && (
           <OverviewTab data={data} incomeCategories={incomeCategories} expenseCategories={expenseCategories} />

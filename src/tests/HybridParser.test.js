@@ -46,7 +46,12 @@ describe('HybridParser', () => {
       preference: 'fallback',
       apiKey: 'sk-ant-test',
     });
-    expect(global.fetch).toHaveBeenCalledWith('/.netlify/functions/parse', expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/.netlify/functions/parse',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-api-key': 'sk-ant-test' }),
+      })
+    );
     expect(r.results[0].source).toBe('ai');
     expect(r.results[0].amount).toBe(350);
   });

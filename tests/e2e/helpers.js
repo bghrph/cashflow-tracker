@@ -25,14 +25,8 @@ export const getTheme = ClientFunction(() => {
   return document.documentElement.getAttribute('data-theme');
 });
 
-export async function signUp(t, { name = 'Test User', email = 'test@example.com', password = 'password123' } = {}) {
-  await t
-    .click(Selector('button').withText('Sign Up'))
-    .typeText(Selector('[data-testid="auth-name"]'), name)
-    .typeText(Selector('[data-testid="auth-email"]'), email)
-    .typeText(Selector('[data-testid="auth-password"]'), password)
-    .click(Selector('[data-testid="auth-submit"]'));
-}
+// signUp removed — auth is now Google Sign-In only via Firebase popup.
+// E2E tests that need an authenticated session should use seedApp() instead.
 
 export const DEFAULT_AUTH = { name: 'E2E User', email: 'e2e@test.com', provider: 'email' };
 

@@ -4,10 +4,14 @@ import { flattenCategories } from '../lib/categories.js';
 import CategoryGroup from '../components/CategoryGroup.jsx';
 import SettingsPanel from '../components/SettingsPanel.jsx';
 import { IconPlus, IconRepeat, IconTrash } from '../components/icons.jsx';
+import { saveProfile } from '../lib/firestore.js';
 
-export default function SetupTab({ data, update }) {
+export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) {
   const [newIncomeGroup, setNewIncomeGroup] = useState('');
   const [newExpenseGroup, setNewExpenseGroup] = useState('');
+  const [keyInput, setKeyInput] = useState(apiKey || '');
+  const [keySaving, setKeySaving] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
   const allExpense = flattenCategories(data.expenseGroups);
   const [selectedCat, setSelectedCat] = useState(allExpense[0] || '');
   const bt = data.budgetTargets[selectedCat] || {
@@ -22,6 +26,20 @@ export default function SetupTab({ data, update }) {
       budgetTargets: { ...p.budgetTargets, [selectedCat]: { ...bt, [field]: value } },
     }));
   const symbol = getCurrency(data.primaryCurrency).symbol;
+
+  const saveApiKey = async () => {
+    if (!uid) return;
+    setKeySaving(true);
+    setKeySaved(false);
+    try {
+      await saveProfile(uid, { anthropicApiKey: keyInput.trim() });
+      onApiKeyChange(keyInput.trim());
+      setKeySaved(true);
+      setTimeout(() => setKeySaved(false), 3000);
+    } finally {
+      setKeySaving(false);
+    }
+  };
 
   const addGroup = (type) => {
     const v = (type === 'income' ? newIncomeGroup : newExpenseGroup).trim();
@@ -238,6 +256,37 @@ export default function SetupTab({ data, update }) {
               );
             })}
           </div>
+        )}
+      </div>
+
+      <div className="card" style={{ borderLeft: '3px solid var(--ai)', marginBottom: 16 }}>
+        <span className="eyebrow ai">AI Settings</span>
+        <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, marginBottom: 12, lineHeight: 1.6 }}>
+          Paste your Anthropic API key to enable AI-powered parsing. Your key is stored privately in your account and never logged.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            className="input"
+            type="password"
+            placeholder="sk-ant-..."
+            data-testid="api-key-input"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}
+          />
+          <button
+            className="btn primary"
+            onClick={saveApiKey}
+            disabled={keySaving || !keyInput.trim()}
+            data-testid="api-key-save"
+          >
+            {keySaving ? 'Saving…' : keySaved ? 'Saved ✓' : 'Save'}
+          </button>
+        </div>
+        {keyInput && !keyInput.startsWith('sk-ant-') && (
+          <p style={{ fontSize: 11, color: 'var(--negative)', marginTop: 6 }}>
+            Key should start with <code>sk-ant-</code>
+          </p>
         )}
       </div>
 

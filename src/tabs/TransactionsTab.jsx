@@ -16,7 +16,7 @@ import {
   IconX,
 } from '../components/icons.jsx';
 
-export default function TransactionsTab({ data, update, incomeCategories, expenseCategories }) {
+export default function TransactionsTab({ data, update, incomeCategories, expenseCategories, apiKey }) {
   const now = new Date();
   const [form, setForm] = useState({
     date: dateString(now.getFullYear(), now.getMonth(), now.getDate()),
@@ -241,7 +241,7 @@ export default function TransactionsTab({ data, update, incomeCategories, expens
       </div>
       <p className="section-sub">{data.transactions.length}/2000 entries · {sorted.length} shown</p>
 
-      <SmartInput data={data} onConfirm={onConfirmSmart} />
+      <SmartInput data={data} onConfirm={onConfirmSmart} apiKey={apiKey} />
 
       {/* Quick add form */}
       <div className="card" style={{ marginBottom: 16 }}>

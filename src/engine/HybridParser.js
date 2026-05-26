@@ -2,7 +2,7 @@
 // parser based on the user's preference and the local parser's confidence.
 
 import { parseTransactions } from './NLPParser.js';
-import { aiParse, AIParserError } from './AIParser.js';
+import { aiParse, AIParserError, isApiKeyConfigured } from './AIParser.js';
 
 const VALID_PREFERENCES = new Set(['local', 'fallback', 'always']);
 
@@ -29,7 +29,8 @@ export async function hybridParse(text, data, options = {}) {
   const preference = VALID_PREFERENCES.has(options.preference)
     ? options.preference
     : data.aiPreference || 'fallback';
-  const hasApiKey = options.hasApiKey !== false; // default true unless explicitly false
+  const apiKey = options.apiKey || '';
+  const hasApiKey = isApiKeyConfigured(apiKey);
 
   // Mode: local only
   if (preference === 'local' || !hasApiKey) {
@@ -39,7 +40,7 @@ export async function hybridParse(text, data, options = {}) {
   // Mode: always AI
   if (preference === 'always') {
     try {
-      const ai = await aiParse(text, data);
+      const ai = await aiParse(text, data, apiKey);
       return tagSource(ai, 'ai');
     } catch (err) {
       const local = parseTransactions(text, data);
@@ -58,7 +59,7 @@ export async function hybridParse(text, data, options = {}) {
 
   // Local is uncertain → ask AI on the whole input (cleaner merge semantics).
   try {
-    const ai = await aiParse(text, data);
+    const ai = await aiParse(text, data, apiKey);
     return tagSource(ai, 'ai');
   } catch (err) {
     return {

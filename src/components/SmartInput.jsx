@@ -1,23 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { hybridParse } from '../engine/HybridParser.js';
 import { isApiKeyConfigured } from '../engine/AIParser.js';
 import { flattenCategories } from '../lib/categories.js';
 import { formatShortDate } from '../lib/dates.js';
 import { IconChevron, IconCheck, IconX, IconSparkle } from './icons.jsx';
 
-export default function SmartInput({ data, onConfirm }) {
+export default function SmartInput({ data, onConfirm, apiKey = '' }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [results, setResults] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errorToast, setErrorToast] = useState(null);
 
-  useEffect(() => {
-    isApiKeyConfigured().then(setHasApiKey);
-  }, []);
+  const hasApiKey = isApiKeyConfigured(apiKey);
 
   const run = async (preferenceOverride) => {
     if (!text.trim()) return;
@@ -27,7 +24,7 @@ export default function SmartInput({ data, onConfirm }) {
     try {
       const r = await hybridParse(text, data, {
         preference: preferenceOverride || data.aiPreference,
-        hasApiKey,
+        apiKey,
       });
       setResults(r.results);
       setWarnings(r.warnings);

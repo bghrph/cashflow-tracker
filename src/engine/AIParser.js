@@ -1,8 +1,12 @@
-// Client-side AI parser. Calls the Vite dev-server proxy at /api/parse so the
-// Anthropic API key never enters the browser bundle.
+// Client-side AI parser. Calls the Netlify function at /.netlify/functions/parse,
+// forwarding the user's own Anthropic API key via the x-api-key header. The
+// system prompt (with categories, date, and currency) is built client-side by
+// promptTemplate.js and sent alongside the raw text so the Netlify function only
+// needs to relay both fields to the Anthropic API.
 
 import { flattenCategories } from '../lib/categories.js';
 import { dateString } from '../lib/dates.js';
+import { buildSystemPrompt } from './promptTemplate.js';
 
 export class AIParserError extends Error {
   constructor(message, status) {
@@ -12,7 +16,7 @@ export class AIParserError extends Error {
   }
 }
 
-export async function aiParse(text, data) {
+export async function aiParse(text, data, apiKey) {
   const today = (() => {
     const d = new Date();
     return dateString(d.getFullYear(), d.getMonth(), d.getDate());
@@ -23,15 +27,15 @@ export async function aiParse(text, data) {
     expense: flattenCategories(data.expenseGroups),
   };
 
-  const response = await fetch('/api/parse', {
+  const systemPrompt = buildSystemPrompt({ categories, today, primaryCurrency: data.primaryCurrency });
+
+  const response = await fetch('/.netlify/functions/parse', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      today,
-      primaryCurrency: data.primaryCurrency,
-      categories,
-    }),
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify({ text, systemPrompt }),
   });
 
   if (!response.ok) {
@@ -46,10 +50,13 @@ export async function aiParse(text, data) {
   }
 
   const json = await response.json();
+  // The Netlify function returns { content: '<raw JSON string>' }; parse it.
+  const parsed = typeof json.content === 'string' ? JSON.parse(json.content) : json;
+
   const existingIncome = new Set(categories.income);
   const existingExpense = new Set(categories.expense);
 
-  const results = (json.transactions || []).map((t, i) => {
+  const results = (parsed.transactions || []).map((t, i) => {
     const existingSet = t.type === 'Income' ? existingIncome : existingExpense;
     return {
       _idx: i,
@@ -64,16 +71,9 @@ export async function aiParse(text, data) {
     };
   });
 
-  return { results, warnings: json.warnings || [] };
+  return { results, warnings: parsed.warnings || [] };
 }
 
-export async function isApiKeyConfigured() {
-  try {
-    const r = await fetch('/api/health');
-    if (!r.ok) return false;
-    const j = await r.json();
-    return Boolean(j.hasKey);
-  } catch {
-    return false;
-  }
+export function isApiKeyConfigured(apiKey) {
+  return Boolean(apiKey && apiKey.startsWith('sk-ant-'));
 }

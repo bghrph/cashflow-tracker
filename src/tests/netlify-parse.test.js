@@ -44,7 +44,7 @@ describe('netlify parse handler', () => {
 
   it('returns 200 with content when Anthropic call succeeds', async () => {
     mockCreate.mockResolvedValueOnce({
-      content: [{ text: '{"transactions":[],"warnings":[]}' }],
+      content: [{ type: 'text', text: '{"transactions":[],"warnings":[]}' }],
     });
     const res = await handler({
       httpMethod: 'POST',
@@ -65,5 +65,19 @@ describe('netlify parse handler', () => {
       body: JSON.stringify({ text: 'coffee $5', systemPrompt: 'parse' }),
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 429 when Anthropic returns 429', async () => {
+    const err = new Error('Rate limited');
+    err.status = 429;
+    mockCreate.mockRejectedValueOnce(err);
+    const event = {
+      httpMethod: 'POST',
+      headers: { 'x-api-key': 'sk-ant-test' },
+      body: JSON.stringify({ text: 'buy coffee $3' }),
+    };
+    const res = await handler(event);
+    expect(res.statusCode).toBe(429);
+    expect(JSON.parse(res.body).error).toMatch(/rate limit/i);
   });
 });

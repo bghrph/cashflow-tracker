@@ -17,6 +17,7 @@ export const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
+  // systemPrompt is supplied by the client (safe: user's own BYOK key, no shared secret)
   const { text, systemPrompt } = body;
   if (!text) {
     return { statusCode: 400, body: JSON.stringify({ error: 'text is required' }) };
@@ -32,10 +33,14 @@ export const handler = async (event) => {
       messages: [{ role: 'user', content: text }],
     });
 
+    const firstText = response.content.find((c) => c.type === 'text');
+    if (!firstText) {
+      return { statusCode: 502, body: JSON.stringify({ error: 'Empty response from model.' }) };
+    }
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: response.content[0].text }),
+      body: JSON.stringify({ content: firstText.text }),
     };
   } catch (err) {
     const status = err?.status || err?.response?.status;

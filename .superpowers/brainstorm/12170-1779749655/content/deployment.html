@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Deployment & DNS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#09090b;color:#e2e8f0;font-family:'Inter',sans-serif;padding:2rem;overflow-x:hidden}
+
+  h1{font-family:'Fraunces',serif;font-size:2rem;font-weight:700;color:#f8fafc;text-align:center;margin-bottom:0.4rem}
+  .sub{color:#64748b;font-size:0.85rem;text-align:center;margin-bottom:2.5rem}
+
+  /* ── PIPELINE ── */
+  .pipeline{display:flex;align-items:center;gap:0;max-width:900px;margin:0 auto 2.5rem;overflow-x:auto;padding-bottom:0.5rem}
+  .pipe-node{flex:1;min-width:130px;text-align:center}
+  .pipe-box{border-radius:12px;padding:1rem 0.75rem;border:1px solid}
+  .pipe-icon{font-size:1.5rem;margin-bottom:0.4rem}
+  .pipe-name{font-size:0.78rem;font-weight:600;margin-bottom:0.2rem}
+  .pipe-detail{font-size:0.65rem;opacity:0.6;line-height:1.5}
+  .pipe-arrow{flex-shrink:0;width:48px;text-align:center;color:#334155;font-size:1.4rem;padding-top:0.5rem}
+
+  .n-github{background:#0d1117;border-color:#30363d}   .n-github .pipe-name{color:#e6edf3}
+  .n-netlify{background:#003c41;border-color:#00ad9f}   .n-netlify .pipe-name{color:#00ad9f}
+  .n-cdn{background:#0c1a10;border-color:#4ade80}       .n-cdn .pipe-name{color:#4ade80}
+  .n-fn{background:#1c1107;border-color:#fbbf24}        .n-fn .pipe-name{color:#fbbf24}
+  .n-firebase{background:#1a0a00;border-color:#ff8c00}  .n-firebase .pipe-name{color:#ff8c00}
+
+  /* ── DNS ── */
+  .dns-section{max-width:700px;margin:0 auto 2.5rem}
+  .section-label{font-size:0.68rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#64748b;margin-bottom:1rem}
+  .dns-card{background:#0f172a;border:1px solid #1e293b;border-radius:14px;padding:1.5rem;font-family:'SF Mono',monospace;font-size:0.8rem}
+  .dns-row{display:grid;grid-template-columns:100px 60px 1fr;gap:1rem;align-items:center;padding:0.5rem 0;border-bottom:1px solid #1e293b}
+  .dns-row:last-child{border:none}
+  .dns-type{color:#818cf8;font-weight:700}
+  .dns-name{color:#94a3b8}
+  .dns-value{color:#4ade80}
+  .dns-note{color:#475569;font-size:0.68rem;margin-top:0.2rem}
+
+  /* ── ENV VARS ── */
+  .env-section{max-width:700px;margin:0 auto 2.5rem}
+  .env-card{background:#0f172a;border:1px solid #1e293b;border-radius:14px;overflow:hidden}
+  .env-header{background:#1e293b;padding:0.6rem 1rem;display:flex;gap:5px;align-items:center}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .env-filename{font-size:0.7rem;color:#64748b;font-family:'SF Mono',monospace;margin-left:0.5rem}
+  .env-body{padding:1.25rem;font-family:'SF Mono',monospace;font-size:0.76rem;line-height:2}
+  .env-comment{color:#475569}
+  .env-key{color:#fbbf24}
+  .env-val{color:#a78bfa}
+  .env-source{font-size:0.65rem;color:#334155;display:block;margin-top:-0.5rem;margin-bottom:0.25rem}
+
+  /* ── LANDING UPDATE ── */
+  .landing-section{max-width:780px;margin:0 auto 2rem}
+  .landing-split{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  .landing-card{border-radius:12px;padding:1.25rem;font-size:0.82rem;line-height:1.7}
+  .landing-card.before{background:#1c0a0a;border:1px solid #7f1d1d44}
+  .landing-card.after{background:#0c1a10;border:1px solid #14532d44}
+  .lc-label{font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.75rem}
+  .landing-card.before .lc-label{color:#f87171}
+  .landing-card.after .lc-label{color:#4ade80}
+  .cta-mockup{margin-top:0.75rem;padding:0.6rem 1rem;border-radius:8px;font-size:0.78rem;font-weight:600;text-align:center}
+  .cta-old{background:#fee2e2;color:#991b1b}
+  .cta-new{background:#0A6B4E;color:#fff}
+
+  .bottom{text-align:center;color:#475569;font-size:0.82rem;margin-top:1.5rem}
+</style>
+</head>
+<body>
+
+<h1>Deployment & DNS</h1>
+<p class="sub">Git push → Netlify builds → cashflowtracker.net is live. Two DNS records. Done.</p>
+
+<!-- PIPELINE -->
+<div class="pipeline">
+  <div class="pipe-node">
+    <div class="pipe-box n-github">
+      <div class="pipe-icon">🐙</div>
+      <div class="pipe-name">GitHub</div>
+      <div class="pipe-detail">Push to main<br>triggers deploy</div>
+    </div>
+  </div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node">
+    <div class="pipe-box n-netlify">
+      <div class="pipe-icon">▲</div>
+      <div class="pipe-name">Netlify CI</div>
+      <div class="pipe-detail">npm run build<br>~45 seconds</div>
+    </div>
+  </div>
+  <div class="pipe-arrow">→</div>
+  <div class="pipe-node">
+    <div class="pipe-box n-cdn">
+      <div class="pipe-icon">🌐</div>
+      <div class="pipe-name">Netlify CDN</div>
+      <div class="pipe-detail">cashflowtracker.net<br>HTTPS · global edge</div>
+    </div>
+  </div>
+  <div class="pipe-arrow">+</div>
+  <div class="pipe-node">
+    <div class="pipe-box n-fn">
+      <div class="pipe-icon">⚡</div>
+      <div class="pipe-name">Netlify Fn</div>
+      <div class="pipe-detail">/.netlify/functions<br>/parse · AI proxy</div>
+    </div>
+  </div>
+  <div class="pipe-arrow">+</div>
+  <div class="pipe-node">
+    <div class="pipe-box n-firebase">
+      <div class="pipe-icon">🔥</div>
+      <div class="pipe-name">Firebase</div>
+      <div class="pipe-detail">Auth + Firestore<br>Google Cloud</div>
+    </div>
+  </div>
+</div>
+
+<!-- DNS -->
+<div class="dns-section">
+  <div class="section-label">DNS Records — add these two at your domain registrar</div>
+  <div class="dns-card">
+    <div class="dns-row">
+      <div class="dns-type">A</div>
+      <div class="dns-name">@</div>
+      <div>
+        <div class="dns-value">75.2.60.5</div>
+        <div class="dns-note">Netlify load balancer IP · apex domain (cashflowtracker.net)</div>
+      </div>
+    </div>
+    <div class="dns-row">
+      <div class="dns-type">CNAME</div>
+      <div class="dns-name">www</div>
+      <div>
+        <div class="dns-value">your-site.netlify.app</div>
+        <div class="dns-note">www.cashflowtracker.net → Netlify alias · Netlify gives you this URL after deploy</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:0.75rem;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:0.875rem 1.25rem;font-size:0.78rem;color:#64748b;line-height:1.7">
+    <span style="color:#4ade80">✓</span> SSL certificate issued automatically by Netlify (Let's Encrypt) within ~60 seconds of DNS propagation.<br>
+    <span style="color:#4ade80">✓</span> Add <code style="color:#a78bfa">cashflowtracker.net</code> as an Authorised Domain in Firebase Console → Authentication → Settings, so Google login works on your custom domain.
+  </div>
+</div>
+
+<!-- ENV VARS -->
+<div class="env-section">
+  <div class="section-label">Environment Variables — set in Netlify Dashboard → Site Settings → Env Vars</div>
+  <div class="env-card">
+    <div class="env-header">
+      <div class="dot" style="background:#FF5F57"></div>
+      <div class="dot" style="background:#FFBD2E"></div>
+      <div class="dot" style="background:#28C840"></div>
+      <span class="env-filename">Netlify Environment Variables (not in .env file — set in dashboard)</span>
+    </div>
+    <div class="env-body">
+      <div class="env-comment"># Firebase — from Firebase Console → Project Settings → Your Apps</div>
+      <div><span class="env-key">VITE_FIREBASE_API_KEY</span>=<span class="env-val">AIza...</span></div>
+      <div><span class="env-key">VITE_FIREBASE_AUTH_DOMAIN</span>=<span class="env-val">cashflowtracker-xyz.firebaseapp.com</span></div>
+      <div><span class="env-key">VITE_FIREBASE_PROJECT_ID</span>=<span class="env-val">cashflowtracker-xyz</span></div>
+      <div><span class="env-key">VITE_FIREBASE_APP_ID</span>=<span class="env-val">1:123456:web:abc...</span></div>
+      <br/>
+      <div class="env-comment"># No ANTHROPIC_API_KEY here — users bring their own in Settings</div>
+    </div>
+  </div>
+  <div style="margin-top:0.75rem;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:0.875rem 1.25rem;font-size:0.78rem;color:#64748b;line-height:1.7">
+    <span style="color:#fbbf24">⚡</span> <code style="color:#a78bfa">VITE_</code> prefix makes vars available in the browser bundle. Firebase public config is safe to expose — it's not a secret (security comes from Firestore rules + Auth, not from hiding these keys).
+  </div>
+</div>
+
+<!-- LANDING PAGE UPDATE -->
+<div class="landing-section">
+  <div class="section-label">Landing Page — one CTA change</div>
+  <div class="landing-split">
+    <div class="landing-card before">
+      <div class="lc-label">❌ Current</div>
+      <p style="color:#fca5a5">Hero says "Run It Locally →" and the how-it-works section walks through git clone, npm install, and starting a local server. Implies technical setup required.</p>
+      <div class="cta-mockup cta-old">Run It Locally →</div>
+    </div>
+    <div class="landing-card after">
+      <div class="lc-label">✓ Updated</div>
+      <p style="color:#86efac">Hero CTA becomes "Open the App →" linking directly to cashflowtracker.net. How-it-works section changes to: Sign in with Google → Your data is ready → Start tracking. No installation copy anywhere.</p>
+      <div class="cta-mockup cta-new">Open the App →</div>
+    </div>
+  </div>
+</div>
+
+<p class="bottom">Does this deployment design look right? Reply in terminal — this is the last section before we write the spec.</p>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "skipJsErrors": true,
+  "pageRequestTimeout": 30000,
+  "selectorTimeout": 8000,
+  "assertionTimeout": 6000,
+  "speed": 1,
+  "screenshots": {
+    "path": "tests/e2e/screenshots",
+    "takeOnFails": true,
+    "fullPage": true
+  },
+  "color": true
+}

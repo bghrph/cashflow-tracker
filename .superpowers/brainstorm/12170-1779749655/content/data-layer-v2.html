@@ -1,0 +1,160 @@
+<h2>Data Layer — Firestore Schema</h2>
+<p class="subtitle">Two documents per user. Simple rules. Zero data loss on migration.</p>
+
+<div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:2rem">
+
+  <!-- SCHEMA VISUAL -->
+  <div style="background:#0f172a;border-radius:16px;padding:2rem;font-size:0.82rem;font-family:'SF Mono',monospace">
+
+    <div style="color:#64748b;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:1.25rem">📦 Firestore Database Structure</div>
+
+    <!-- Collection header -->
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+      <span style="color:#fbbf24;font-size:1.1rem">◆</span>
+      <span style="color:#fbbf24;font-weight:700">users</span>
+      <span style="color:#334155;font-size:0.72rem">collection</span>
+    </div>
+
+    <!-- User node -->
+    <div style="margin-left:1.5rem;border-left:2px solid #1e293b;padding-left:1rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0">
+        <span style="color:#60a5fa">◉</span>
+        <span style="color:#60a5fa;font-weight:600">{uid}</span>
+        <span style="color:#334155;font-size:0.7rem">— one per Google account e.g. "xK9mQ..."</span>
+      </div>
+
+      <!-- Two documents side by side -->
+      <div style="margin-left:1rem;border-left:2px solid #1e293b;padding-left:1rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:0.5rem">
+
+        <!-- profile doc -->
+        <div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+            <span style="color:#a78bfa">📄</span>
+            <span style="color:#a78bfa;font-weight:600">profile</span>
+          </div>
+          <div style="background:#1e1b4b;border:1px solid #312e81;border-radius:10px;padding:1rem;line-height:2;font-size:0.76rem">
+            <div><span style="color:#818cf8">email</span> <span style="color:#475569">string</span></div>
+            <div><span style="color:#818cf8">displayName</span> <span style="color:#475569">string</span></div>
+            <div><span style="color:#818cf8">photoURL</span> <span style="color:#475569">string</span></div>
+            <div><span style="color:#818cf8">createdAt</span> <span style="color:#475569">timestamp</span></div>
+            <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #312e81">
+              <span style="color:#fbbf24">anthropicApiKey</span>
+              <span style="color:#475569"> string?</span>
+              <div style="color:#4b5563;font-size:0.68rem;margin-top:0.25rem">optional — user pastes their<br>own sk-ant-... key in Settings</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- appdata doc -->
+        <div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+            <span style="color:#4ade80">📄</span>
+            <span style="color:#4ade80;font-weight:600">appdata</span>
+          </div>
+          <div style="background:#0c1a10;border:1px solid #166534;border-radius:10px;padding:1rem;line-height:2;font-size:0.76rem">
+            <div><span style="color:#86efac">transactions</span> <span style="color:#475569">array</span></div>
+            <div><span style="color:#86efac">budget</span> <span style="color:#475569">object</span></div>
+            <div><span style="color:#86efac">recurring</span> <span style="color:#475569">array</span></div>
+            <div><span style="color:#86efac">goals</span> <span style="color:#475569">array</span></div>
+            <div><span style="color:#86efac">categoryGroups</span> <span style="color:#475569">array</span></div>
+            <div><span style="color:#86efac">currency</span> <span style="color:#475569">string</span></div>
+            <div><span style="color:#86efac">aiPreference</span> <span style="color:#475569">string</span></div>
+            <div><span style="color:#86efac">savingsTarget</span> <span style="color:#475569">number</span></div>
+            <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #166534">
+              <span style="color:#4ade80">updatedAt</span> <span style="color:#475569">timestamp</span>
+              <div style="color:#4b5563;font-size:0.68rem;margin-top:0.25rem">same shape as mbr-data-v4<br>→ zero data model changes</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- THREE PANELS: Why, Security, API Key -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem">
+      <div style="font-size:0.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">💡 Why one document?</div>
+      <p style="font-size:0.82rem;color:#475569;line-height:1.7">The app always reads and writes its full state at once — just like it does with localStorage today. One <strong>appdata</strong> document keeps the code changes minimal. Firestore's 1 MB limit comfortably holds ~5,000+ transactions.</p>
+    </div>
+
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:1.25rem">
+      <div style="font-size:0.72rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">🔒 Security Rules</div>
+      <div style="background:#dcfce7;border-radius:8px;padding:0.75rem;font-family:'SF Mono',monospace;font-size:0.73rem;color:#14532d;line-height:1.9;margin-bottom:0.5rem">
+        match /users/{uid}/{d=**} {<br>
+        &nbsp;allow read, write:<br>
+        &nbsp;&nbsp;if request.auth.uid == uid;<br>
+        }
+      </div>
+      <p style="font-size:0.78rem;color:#166534">Three lines. Users can only touch their own documents. No exceptions.</p>
+    </div>
+
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:1.25rem">
+      <div style="font-size:0.72rem;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">🔑 API Key Flow</div>
+      <p style="font-size:0.82rem;color:#78350f;line-height:1.7">User pastes their Anthropic key once in Settings. Saved to their <strong>profile</strong> doc. On AI Parse: app reads key from memory → sends as <code style="background:#fef3c7;padding:0.1rem 0.3rem;border-radius:3px">X-Api-Key</code> header → Netlify Function forwards to Anthropic. Key never logged server-side.</p>
+    </div>
+
+  </div>
+
+  <!-- MIGRATION FLOW -->
+  <div style="background:#0f172a;border-radius:16px;padding:1.75rem">
+    <div style="color:#64748b;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:1.25rem">🔄 First-Login Migration Flow</div>
+
+    <div style="display:flex;align-items:stretch;gap:0;font-size:0.78rem;font-family:'SF Mono',monospace">
+
+      <!-- Step 1 -->
+      <div style="flex:1;text-align:center">
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:0.875rem;margin:0 0.25rem">
+          <div style="color:#60a5fa;margin-bottom:0.25rem;font-size:1rem">①</div>
+          <div style="color:#94a3b8">User signs in<br>with Google</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;color:#334155;font-size:1.2rem;padding:0 0.25rem">→</div>
+
+      <!-- Step 2 -->
+      <div style="flex:1;text-align:center">
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:0.875rem;margin:0 0.25rem">
+          <div style="color:#60a5fa;margin-bottom:0.25rem;font-size:1rem">②</div>
+          <div style="color:#94a3b8">Check Firestore<br>for appdata doc</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;color:#334155;font-size:1.2rem;padding:0 0.25rem">→</div>
+
+      <!-- Step 3 - branch -->
+      <div style="flex:1.5;display:flex;flex-direction:column;gap:0.5rem;margin:0 0.25rem">
+        <div style="background:#0c1a10;border:1px solid #166534;border-radius:10px;padding:0.75rem;text-align:center">
+          <div style="color:#4ade80;font-size:0.75rem;font-weight:700">EXISTS → Load from Firestore</div>
+          <div style="color:#64748b;font-size:0.7rem">Returning user, skip import</div>
+        </div>
+        <div style="background:#1c1107;border:1px solid #b45309;border-radius:10px;padding:0.75rem;text-align:center">
+          <div style="color:#fbbf24;font-size:0.75rem;font-weight:700">NEW → Check localStorage</div>
+          <div style="color:#64748b;font-size:0.7rem">mbr-data-v4 found?</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;color:#334155;font-size:1.2rem;padding:0 0.25rem">→</div>
+
+      <!-- Step 4 -->
+      <div style="flex:1.5;display:flex;flex-direction:column;gap:0.5rem;margin:0 0.25rem">
+        <div style="background:#1e1b4b;border:1px solid #4338ca;border-radius:10px;padding:0.75rem;text-align:center">
+          <div style="color:#a78bfa;font-size:0.75rem;font-weight:700">"Import existing data?"</div>
+          <div style="color:#64748b;font-size:0.7rem">One-time prompt → uploads to Firestore</div>
+        </div>
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:0.75rem;text-align:center">
+          <div style="color:#64748b;font-size:0.75rem">No local data → fresh start</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:1rem;padding:0.75rem;background:#1e293b;border-radius:8px;color:#64748b;font-size:0.75rem;text-align:center">
+      ✓ &nbsp;Existing data is never discarded &nbsp;·&nbsp; User always chooses &nbsp;·&nbsp; localStorage cleared only after successful Firestore write
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem;text-align:center">Does this data design look right? Reply in terminal to move to the next section.</p>

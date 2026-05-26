@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vite/
+coverage/
+tests/e2e/screenshots/
+tests/e2e/videos/

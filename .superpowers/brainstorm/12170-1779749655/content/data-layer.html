@@ -1,0 +1,76 @@
+<h2>Data Layer — Firestore Schema</h2>
+<p class="subtitle">How your data is structured in the cloud, and how the API key is stored</p>
+
+<div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:1.5rem">
+
+  <!-- Schema tree -->
+  <div style="background:#0f172a;border-radius:14px;padding:1.75rem;font-family:'SF Mono',monospace;color:#e2e8f0">
+    <div style="color:#4ade80;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:1rem">Firestore Collection Structure</div>
+
+    <div style="line-height:2;font-size:0.82rem">
+      <div style="color:#fbbf24">📁 users/</div>
+      <div style="padding-left:1.5rem;color:#94a3b8">└── <span style="color:#60a5fa">{uid}</span> &nbsp;<span style="color:#475569">← one per Google account</span></div>
+
+      <div style="padding-left:3rem;margin-top:0.25rem">
+        <div style="color:#94a3b8">├── <span style="color:#4ade80">profile</span> <span style="color:#475569">(document)</span></div>
+        <div style="padding-left:1.5rem;color:#64748b;font-size:0.75rem">
+          ├── email: "user@gmail.com"<br>
+          ├── displayName: "Hussein"<br>
+          ├── createdAt: timestamp<br>
+          └── <span style="color:#fbbf24">anthropicApiKey: "sk-ant-..." </span><span style="color:#475569">← user's own key, optional</span>
+        </div>
+
+        <div style="color:#94a3b8;margin-top:0.5rem">└── <span style="color:#4ade80">appdata</span> <span style="color:#475569">(document — mirrors current localStorage)</span></div>
+        <div style="padding-left:1.5rem;color:#64748b;font-size:0.75rem">
+          ├── transactions: [ ...array of tx objects ]<br>
+          ├── budget: { monthly: 3000, rollover: true }<br>
+          ├── recurring: [ ...recurring templates ]<br>
+          ├── goals: [ ...savings goals ]<br>
+          ├── currency: "USD"<br>
+          ├── aiPreference: "fallback"<br>
+          ├── categoryGroups: [ ...groups ]<br>
+          ├── savingsTarget: 500<br>
+          └── updatedAt: timestamp
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two key decisions -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+    <div style="background:#1c1107;border:1px solid #b45309;border-radius:10px;padding:1.25rem">
+      <div style="color:#fbbf24;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.75rem">🔑 Anthropic API Key Storage</div>
+      <p style="font-size:0.85rem;color:#fcd34d;line-height:1.7">Stored as a field in the user's <code style="background:#451a03;padding:0.1rem 0.4rem;border-radius:4px">profile</code> document. Google encrypts all Firestore data at rest. Security rules ensure only the authenticated user can read their own profile — no one else can see it.</p>
+      <p style="font-size:0.82rem;color:#92400e;margin-top:0.5rem">On each AI Parse request, the React app reads the key from Firestore (cached in memory after first load) and sends it in the <code style="background:#451a03;padding:0.1rem 0.4rem;border-radius:4px">X-Api-Key</code> header to the Netlify Function.</p>
+    </div>
+
+    <div style="background:#0c1a10;border:1px solid #16a34a;border-radius:10px;padding:1.25rem">
+      <div style="color:#4ade80;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.75rem">🔒 Security Rules (5 lines)</div>
+      <div style="background:#14532d;border-radius:8px;padding:0.75rem;font-family:'SF Mono',monospace;font-size:0.75rem;color:#86efac;line-height:1.8">
+        match /users/{uid}/{doc=**} {<br>
+        &nbsp;&nbsp;allow read, write:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if request.auth != null<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&amp;&amp; request.auth.uid == uid;<br>
+        }
+      </div>
+      <p style="font-size:0.8rem;color:#166534;margin-top:0.5rem">Each user can only touch their own documents. No user can see or modify another user's data.</p>
+    </div>
+
+  </div>
+
+  <!-- Migration note -->
+  <div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:10px;padding:1.25rem">
+    <div style="color:#0369a1;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem">🔄 Migration: localStorage → Firestore</div>
+    <p style="font-size:0.85rem;color:#0c4a6e;line-height:1.7">On first login, the app checks if the user has an existing <code style="background:#e0f2fe;padding:0.1rem 0.4rem;border-radius:4px">appdata</code> document in Firestore. If not (new user), it checks if there's data in <code style="background:#e0f2fe;padding:0.1rem 0.4rem;border-radius:4px">mbr-data-v4</code> in localStorage. If found, it offers a one-time "Import your existing data?" prompt — clicking yes uploads it to Firestore and clears localStorage. Existing data is never lost.</p>
+  </div>
+
+  <!-- Why single document -->
+  <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:1.25rem">
+    <div style="color:#475569;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem">💡 Why one document per user (not subcollections)?</div>
+    <p style="font-size:0.85rem;color:#475569;line-height:1.7">The entire app state is read and written together — just like localStorage. A single <code style="background:#f1f5f9;padding:0.1rem 0.4rem;border-radius:4px">appdata</code> document keeps the data model identical to the current app, minimising code changes. Firestore's 1MB document limit is generous — a user would need ~5,000+ detailed transactions to approach it.</p>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem;text-align:center">Does this data design look right? Reply in terminal to continue.</p>

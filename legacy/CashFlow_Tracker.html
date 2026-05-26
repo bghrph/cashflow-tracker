@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Monthly Budget Review</title>
+<meta name="description" content="Personal finance tracker with budgets, savings goals, and recurring transactions"/>
+<meta name="theme-color" content="#08080a"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>"/>
+<style>
+html,body{margin:0;padding:0;background:#08080a;overflow-x:hidden}
+#root{min-height:100vh}
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
+const { PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } = Recharts;
+
+/* ══════════════════════════════════════════════
+   STORAGE
+   ══════════════════════════════════════════════ */
+const SK = "mbr-data-v4", AK = "mbr-auth-v4";
+const ld = async k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const sv = async (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+/* ══════════════════════════════════════════════
+   CURRENCIES
+   ══════════════════════════════════════════════ */
+const CUR = [
+  {c:"USD",s:"$",n:"US Dollar"},{c:"EUR",s:"€",n:"Euro"},{c:"GBP",s:"£",n:"British Pound"},
+  {c:"JPY",s:"¥",n:"Japanese Yen"},{c:"CAD",s:"CA$",n:"Canadian Dollar"},{c:"AUD",s:"A$",n:"Australian Dollar"},
+  {c:"CHF",s:"CHF",n:"Swiss Franc"},{c:"INR",s:"₹",n:"Indian Rupee"},{c:"MXN",s:"MX$",n:"Mexican Peso"},
+  {c:"BRL",s:"R$",n:"Brazilian Real"},{c:"KRW",s:"₩",n:"Korean Won"},{c:"NGN",s:"₦",n:"Nigerian Naira"},
+  {c:"ZAR",s:"R",n:"S.African Rand"},{c:"GHS",s:"₵",n:"Ghanaian Cedi"},{c:"AED",s:"د.إ",n:"UAE Dirham"},
+  {c:"CNY",s:"¥",n:"Chinese Yuan"},
+];
+const R2U = {USD:1,EUR:1.08,GBP:1.27,JPY:0.0067,CAD:0.74,AUD:0.65,CHF:1.13,INR:0.012,MXN:0.058,BRL:0.20,KRW:0.00075,NGN:0.00065,ZAR:0.055,GHS:0.063,AED:0.27,CNY:0.14};
+const cx = (a,f,t) => f===t?a:a*(R2U[f]||1)/(R2U[t]||1);
+const co = c => CUR.find(x=>x.c===c)||CUR[0];
+
+/* ══════════════════════════════════════════════
+   DEFAULT STATE
+   ══════════════════════════════════════════════ */
+const DEF = {
+  primaryCurrency:"USD",
+  incomeGroups:[{name:"General",categories:["Salary","Freelance","Investments"]}],
+  expenseGroups:[{name:"Bills & Housing",categories:["Rent","Utilities"]},{name:"Living",categories:["Groceries","Transport"]}],
+  transactions:[],nextId:1,
+  budgetTargets:{},
+  savingsGoals:[],nextGoalId:1,
+  notifications:[],nextNotifId:1,
+  monthlySavingsTarget:0,
+  recurringTemplates:[],nextTplId:1,
+  lastAutoFillMonth:"",
+};
+
+const migrate = d => {
+  const r = {...DEF,...d};
+  if(d.incomeCategories&&!d.incomeGroups){r.incomeGroups=[{name:"General",categories:[...d.incomeCategories]}];}
+  if(d.expenseCategories&&!d.expenseGroups){r.expenseGroups=[{name:"General",categories:[...d.expenseCategories]}];}
+  if(!r.budgetTargets)r.budgetTargets={};
+  if(!r.savingsGoals)r.savingsGoals=[];
+  if(!r.notifications)r.notifications=[];
+  if(!r.nextGoalId)r.nextGoalId=1;
+  if(!r.nextNotifId)r.nextNotifId=1;
+  if(!r.monthlySavingsTarget)r.monthlySavingsTarget=0;
+  if(!r.recurringTemplates)r.recurringTemplates=[];
+  if(!r.nextTplId)r.nextTplId=1;
+  if(!r.lastAutoFillMonth)r.lastAutoFillMonth="";
+  r.transactions=(r.transactions||[]).map(t=>t.currencyCode?t:{...t,currencyCode:r.primaryCurrency||"USD"});
+  if(r.currency)delete r.currency;
+  return r;
+};
+
+/* ══════════════════════════════════════════════
+   HELPERS
+   ══════════════════════════════════════════════ */
+const MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const pad=n=>String(n).padStart(2,"0");
+const ds=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
+const mr=(y,m)=>({s:ds(y,m,1),e:ds(y,m,new Date(y,m+1,0).getDate())});
+const fm=(s,a)=>{const n=Number(a)||0;const b=Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});return n<0?`−${s}${b}`:`${s}${b}`;};
+const fd=x=>{const p=x.split("-");return`${MS[parseInt(p[1],10)-1]} ${parseInt(p[2],10)}`;};
+const fl=gs=>gs.flatMap(g=>g.categories);
+
+/* Colors */
+const IG=["#34d399","#10b981","#059669","#047857","#6ee7b7","#065f46"];
+const EG=["#fb7185","#f43f5e","#e11d48","#be123c","#fda4af","#9f1239","#f97316","#ea580c"];
+const AG=["#c9a55c","#dbb978","#b08840","#a07630","#e8c878","#906020","#34d399","#fb7185","#60a5fa","#c084fc"];
+
+/* Rollover calc */
+const calcRoll=(data,cat,y,m)=>{
+  const cfg=data.budgetTargets[cat];if(!cfg||cfg.monthly<=0)return null;
+  const pc=data.primaryCurrency,rng=mr(y,m);
+  const spent=data.transactions.filter(t=>t.date>=rng.s&&t.date<=rng.e&&t.type==="Expense"&&t.category===cat)
+    .reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+  const surplus=cfg.monthly-spent;
+  const rt=cfg.rollover||"none";
+  const ra=surplus<=0?0:rt==="limited"?Math.min(surplus,cfg.rolloverLimit||0):rt==="none"?0:surplus;
+  return{budget:cfg.monthly,spent,surplus,ra,rt};
+};
+
+/* Recurring detection */
+const detectRec=(txs,pc)=>{
+  const byC={};txs.filter(t=>t.type==="Expense").forEach(t=>{(byC[t.category]=byC[t.category]||[]).push(t);});
+  const out=[];
+  for(const[cat,arr] of Object.entries(byC)){
+    if(arr.length<2)continue;
+    const s=[...arr].sort((a,b)=>a.date.localeCompare(b.date));
+    const iv=[];for(let i=1;i<s.length;i++){const d1=new Date(s[i-1].date+"T12:00:00"),d2=new Date(s[i].date+"T12:00:00");iv.push(Math.round((d2-d1)/(864e5)));}
+    if(!iv.length)continue;
+    const avg=iv.reduce((a,b)=>a+b,0)/iv.length;
+    const std=Math.sqrt(iv.reduce((a,v)=>a+(v-avg)**2,0)/iv.length);
+    if(avg>=20&&avg<=40&&std<10){
+      const amts=s.map(t=>cx(t.amount,t.currencyCode||pc,pc));
+      const aAvg=amts.reduce((a,b)=>a+b,0)/amts.length;
+      const last=new Date(s[s.length-1].date+"T12:00:00");
+      const next=new Date(last.getTime()+avg*864e5);
+      out.push({category:cat,avgAmount:aAvg,avgInterval:avg,confidence:Math.max(0,Math.min(100,100-(std/avg*100))),nextDate:next,occurrences:s.length});
+    }
+  }
+  return out.sort((a,b)=>b.confidence-a.confidence);
+};
+
+/* Health score */
+const calcHealth=data=>{
+  const pc=data.primaryCurrency,now=new Date();
+  const tma=new Date(now);tma.setMonth(now.getMonth()-3);
+  const tmaS=ds(tma.getFullYear(),tma.getMonth(),tma.getDate());
+  const rec=data.transactions.filter(t=>t.date>=tmaS);
+  const tI=rec.filter(t=>t.type==="Income").reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+  const tE=rec.filter(t=>t.type==="Expense").reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+  const sr=tI>0?Math.max(0,((tI-tE)/tI)*100):0;
+  const sScore=sr>=20?100:sr>=10?60+(sr-10)*4:sr*6;
+  const tgts=Object.entries(data.budgetTargets).filter(([,v])=>v.monthly>0);
+  let aScore=100;
+  if(tgts.length>0){const cm=mr(now.getFullYear(),now.getMonth());const mTx=data.transactions.filter(t=>t.date>=cm.s&&t.date<=cm.e);let ta=0;tgts.forEach(([c,cfg])=>{const sp=mTx.filter(t=>t.type==="Expense"&&t.category===c).reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);const r=cfg.monthly>0?sp/cfg.monthly:0;ta+=r<=1?100:Math.max(0,100-(r-1)*200);});aScore=ta/tgts.length;}
+  const mE={};rec.filter(t=>t.type==="Expense").forEach(t=>{const m=t.date.slice(0,7);mE[m]=(mE[m]||0)+cx(t.amount,t.currencyCode||pc,pc);});
+  const mv=Object.values(mE);let cScore=80;if(mv.length>=2){const ma=mv.reduce((a,b)=>a+b,0)/mv.length;const ms=Math.sqrt(mv.reduce((a,v)=>a+(v-ma)**2,0)/mv.length);cScore=Math.max(0,Math.min(100,100-(ma>0?ms/ma:0)*200));}
+  let gScore=50;if(data.savingsGoals.length>0){gScore=data.savingsGoals.reduce((s,g)=>s+Math.min(1,g.current/Math.max(1,g.target)),0)/data.savingsGoals.length*100;}
+  return{overall:Math.round(sScore*.25+aScore*.25+cScore*.25+gScore*.25),savings:{score:Math.round(sScore),rate:sr},adherence:{score:Math.round(aScore),count:tgts.length},consistency:{score:Math.round(cScore)},goals:{score:Math.round(gScore),count:data.savingsGoals.length}};
+};
+
+const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+/* Smart Notifications */
+const genNotifs=(data)=>{
+  const ns=[];const pc=data.primaryCurrency,ps=co(pc).s;
+  const now=new Date(),day=now.getDate();
+  const rng=mr(now.getFullYear(),now.getMonth());
+  const mTx=data.transactions.filter(t=>t.date>=rng.s&&t.date<=rng.e);
+  Object.entries(data.budgetTargets).forEach(([cat,cfg])=>{
+    if(cfg.monthly<=0)return;
+    const sp=mTx.filter(t=>t.type==="Expense"&&t.category===cat).reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+    const pct=sp/cfg.monthly*100;
+    if(pct>=80&&day<18)ns.push({type:"warning",icon:"\u26A0\uFE0F",title:cat+" at "+Math.round(pct)+"%",body:"Used "+fm(ps,sp)+" of "+fm(ps,cfg.monthly)+" budget and only day "+day+".",p:2});
+    if(sp>cfg.monthly)ns.push({type:"danger",icon:"\uD83D\uDD34",title:cat+" over budget",body:"Over by "+fm(ps,sp-cfg.monthly)+". Consider pausing spending.",p:3});
+  });
+  const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  if(lastDay-day<=7){
+    let surplus=0;const cs=[];
+    Object.entries(data.budgetTargets).forEach(([cat,cfg])=>{
+      if(cfg.monthly<=0||cfg.rollover==="accumulate")return;
+      const sp=mTx.filter(t=>t.type==="Expense"&&t.category===cat).reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+      const d=cfg.monthly-sp;if(d>10){surplus+=d;cs.push(cat);}
+    });
+    if(surplus>50)ns.push({type:"success",icon:"\uD83D\uDCB0",title:fm(ps,surplus)+" available to save",body:cs.length+" categories under budget. Move surplus to savings!",p:1});
+  }
+  const todayStr=ds(now.getFullYear(),now.getMonth(),now.getDate());
+  const wAgo=new Date(now);wAgo.setDate(now.getDate()-7);
+  const wS=ds(wAgo.getFullYear(),wAgo.getMonth(),wAgo.getDate());
+  const wTx=data.transactions.filter(t=>t.date>=wS&&t.date<=todayStr&&t.type==="Expense");
+  if(wTx.length>0){
+    const wT=wTx.reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+    const cT={};wTx.forEach(t=>{cT[t.category]=(cT[t.category]||0)+cx(t.amount,t.currencyCode||pc,pc);});
+    const top=Object.entries(cT).sort((a,b)=>b[1]-a[1])[0];
+    ns.push({type:"recap",icon:"\uD83D\uDCCB",title:"Weekly Recap",body:fm(ps,wT)+" spent this week ("+wTx.length+" txns)."+(top?" Top: "+top[0]+" ("+fm(ps,top[1])+").":""),p:0});
+  }
+  return ns.sort((a,b)=>b.p-a.p);
+};
+
+/* Animated counter */
+function ANum({value,sym,color,sz}){
+  const[d,setD]=useState(0);const ref=useRef(null);
+  useEffect(()=>{const tgt=Number(value)||0;const dur=600;const t0=performance.now();const tick=t=>{const p=Math.min((t-t0)/dur,1);setD(tgt*p*p*(3-2*p));if(p<1)ref.current=requestAnimationFrame(tick);};ref.current=requestAnimationFrame(tick);return()=>{if(ref.current)cancelAnimationFrame(ref.current);};},[value]);
+  return <span style={{fontSize:sz||17,fontWeight:700,color,fontVariantNumeric:"tabular-nums"}}>{fm(sym,d)}</span>;
+}
+
+/* ══════════════════════════════════════════════
+   ICONS (SVG inline)
+   ══════════════════════════════════════════════ */
+const ic = {
+  settings:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  list:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+  chart:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  plus:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  trash:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  chev:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+  folder:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  logout:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  google:<svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>,
+  target:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  search:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  eye:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  eyeOff:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+  download:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+  bell:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  edit:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  check:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  xic:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  repeat:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
+  sweep:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>,
+};
+
+/* ══════════════════════════════════════════════
+   STYLES
+   ══════════════════════════════════════════════ */
+const CSS=`
+:root{--gold:#c9a55c;--gold-h:#dbb978;--gold-dim:rgba(201,165,92,.15);--bg:#08080a;--s1:rgba(255,255,255,.03);--s2:rgba(255,255,255,.06);--s3:rgba(255,255,255,.09);--brd:rgba(255,255,255,.06);--brd2:rgba(255,255,255,.1);--txt:#e8e4de;--txt2:#8a847c;--txt3:#555049;--grn:#34d399;--grn-bg:rgba(52,211,153,.08);--red:#fb7185;--red-bg:rgba(251,113,133,.08);--blu:#60a5fa;--blu-bg:rgba(96,165,250,.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--gold-dim)}
+input,select,textarea{font-family:'Outfit',sans-serif}input::placeholder,textarea::placeholder{color:var(--txt3)}
+@keyframes fu{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes si{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes glow-pulse{0%,100%{box-shadow:0 0 12px rgba(201,165,92,.08)}50%{box-shadow:0 0 24px rgba(201,165,92,.18)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.fu{animation:fu .45s cubic-bezier(.22,1,.36,1) both}.si{animation:si .3s cubic-bezier(.22,1,.36,1) both}
+.cd{background:var(--s1);border:1px solid var(--brd);border-radius:14px;transition:all .25s cubic-bezier(.22,1,.36,1);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}.cd:hover{border-color:var(--brd2);background:var(--s2)}
+.cd-glow{animation:glow-pulse 4s ease-in-out infinite}
+.btn{cursor:pointer;border:none;font-family:'Outfit',sans-serif;font-weight:500;transition:all .2s cubic-bezier(.22,1,.36,1);letter-spacing:.01em}.btn:active{transform:scale(.95)}
+.bp{background:var(--gold);color:#0a0a0a;padding:8px 18px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 2px 12px rgba(201,165,92,.2)}.bp:hover{background:var(--gold-h);box-shadow:0 4px 20px rgba(201,165,92,.35)}
+.bg{background:transparent;color:var(--txt2);padding:6px 10px;border-radius:8px;font-size:11px}.bg:hover{background:var(--s2);color:var(--txt)}
+.bd{background:var(--red-bg);color:var(--red);padding:5px 8px;border-radius:6px;font-size:10px;font-weight:500}.bd:hover{background:rgba(251,113,133,.15)}
+.bs{background:var(--grn-bg);color:var(--grn);padding:5px 8px;border-radius:6px;font-size:10px;font-weight:500}.bs:hover{background:rgba(52,211,153,.15)}
+.noti{background:var(--s1);border:1px solid var(--brd);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;backdrop-filter:blur(12px)}
+.noti.warning{border-color:rgba(251,191,36,.15);background:rgba(251,191,36,.04)}.noti.danger{border-color:rgba(251,113,133,.15);background:rgba(251,113,133,.04)}.noti.success{border-color:rgba(52,211,153,.15);background:rgba(52,211,153,.04)}
+.inp{background:var(--s1);border:1px solid var(--brd);color:var(--txt);padding:9px 12px;border-radius:8px;font-size:12px;width:100%;outline:none;transition:all .25s;backdrop-filter:blur(8px)}.inp:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,165,92,.08)}
+select.inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23555' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+select.inp option{background:#141416;color:var(--txt)}
+.ti{background:var(--grn-bg);color:var(--grn);padding:2px 8px;border-radius:20px;font-size:8px;font-weight:600;display:inline-block;letter-spacing:.3px;text-transform:uppercase}
+.te{background:var(--red-bg);color:var(--red);padding:2px 8px;border-radius:20px;font-size:8px;font-weight:600;display:inline-block;letter-spacing:.3px;text-transform:uppercase}
+.nb{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 14px;border-radius:12px;cursor:pointer;border:none;background:transparent;color:var(--txt3);font-family:'Outfit',sans-serif;font-size:8px;font-weight:600;transition:all .25s;letter-spacing:.5px;text-transform:uppercase;position:relative}
+.nb:hover{color:var(--txt2);background:var(--s1)}.nb.ac{color:var(--gold);background:var(--gold-dim)}
+.nb.ac::after{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:16px;height:2px;background:var(--gold);border-radius:2px}
+.gh{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s1);border-radius:10px;cursor:pointer;transition:all .2s;user-select:none;border:1px solid transparent}.gh:hover{background:var(--s2);border-color:var(--brd)}
+.gb{overflow:hidden;transition:max-height .35s cubic-bezier(.22,1,.36,1),opacity .25s}.gb.o{max-height:600px;opacity:1}.gb.c{max-height:0;opacity:0}
+.grain{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;opacity:.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.ambient{position:fixed;top:-20%;left:50%;transform:translateX(-50%);width:120%;height:300px;background:radial-gradient(ellipse at center,rgba(201,165,92,.04) 0%,transparent 70%);pointer-events:none;z-index:0}
+@media(max-width:640px){.tfg{grid-template-columns:1fr 1fr!important}.sg{grid-template-columns:1fr!important}.bg2{grid-template-columns:1fr!important}.cg{grid-template-columns:1fr!important}}
+`;
+
+/* ══════════════════════════════════════════════
+   AUTH SCREEN
+   ══════════════════════════════════════════════ */
+function Auth({onLogin}){
+  const[mode,setMode]=useState("login");
+  const[email,setEmail]=useState("");const[pw,setPw]=useState("");const[name,setName]=useState("");
+  const[showPw,setShowPw]=useState(false);const[err,setErr]=useState("");
+  const go=()=>{setErr("");if(mode==="signup"&&!name.trim()){setErr("Name required.");return;}if(!email.includes("@")){setErr("Valid email required.");return;}if(pw.length<6){setErr("Password 6+ chars.");return;}onLogin({name:name.trim()||email.split("@")[0],email,provider:"email"});};
+  return(
+    <div style={{minHeight:"100vh",background:"#08080a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Outfit',sans-serif",padding:20,position:"relative",overflow:"hidden"}}>
+      <div className="grain"/><div className="ambient"/>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/><style>{CSS}</style>
+      <div className="fu" style={{width:"100%",maxWidth:380,position:"relative",zIndex:1}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{width:48,height:48,margin:"0 auto 14px",background:"var(--gold-dim)",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid rgba(201,165,92,.2)"}}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:22,color:"var(--gold)",fontWeight:700,letterSpacing:"-0.02em"}}>Monthly Budget Review</h1>
+          <p style={{fontSize:10,color:"var(--txt3)",marginTop:6,textTransform:"uppercase",letterSpacing:"2px",fontWeight:500}}>Financial Wellness Dashboard</p>
+        </div>
+        <div className="cd" style={{padding:"28px 24px",border:"1px solid rgba(201,165,92,.08)"}}>
+          <div style={{display:"flex",background:"var(--s1)",borderRadius:10,padding:3,marginBottom:20}}>
+            {["login","signup"].map(m=><button key={m} className="btn" onClick={()=>{setMode(m);setErr("");}} style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:11,fontWeight:600,letterSpacing:".3px",background:mode===m?"var(--gold)":"transparent",color:mode===m?"#0a0a0a":"var(--txt3)"}}>{m==="login"?"Log In":"Sign Up"}</button>)}
+          </div>
+          <button className="btn" onClick={()=>onLogin({name:"Google User",email:"user@gmail.com",provider:"google"})} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px",background:"#fafafa",color:"#1a1a1a",borderRadius:8,fontSize:13,fontWeight:600,marginBottom:16}}>{ic.google} Continue with Google</button>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}><div style={{flex:1,height:1,background:"#2a2a2a"}}/><span style={{fontSize:10,color:"var(--txt3)"}}>or</span><div style={{flex:1,height:1,background:"#2a2a2a"}}/></div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {mode==="signup"&&<input className="inp" placeholder="Full Name" value={name} onChange={e=>setName(e.target.value)} style={{fontSize:12}}/>}
+            <input className="inp" type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{fontSize:12}}/>
+            <div style={{position:"relative"}}><input className="inp" type={showPw?"text":"password"} placeholder="Password (6+)" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{fontSize:12,paddingRight:36}}/><button className="btn" onClick={()=>setShowPw(s=>!s)} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",color:"var(--txt3)",padding:3}}>{showPw?ic.eyeOff:ic.eye}</button></div>
+          </div>
+          {err&&<p style={{color:"var(--red)",fontSize:11,marginTop:8}}>{err}</p>}
+          <button className="btn bp" onClick={go} style={{width:"100%",padding:"10px 0",marginTop:14,fontSize:13,fontWeight:700}}>{mode==="login"?"Log In":"Create Account"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   MAIN APP
+   ══════════════════════════════════════════════ */
+function App(){
+  const[auth,setAuth]=useState(undefined);
+  const[data,setData]=useState(null);
+  const[tab,setTab]=useState("overview");
+  const[loading,setLoading]=useState(true);
+  const[showNotifs,setShowNotifs]=useState(false);
+
+  useEffect(()=>{Promise.all([ld(AK),ld(SK)]).then(([a,d])=>{setAuth(a||null);if(a)setData(d?migrate(d):{...DEF});setLoading(false);});},[]);
+
+  const up=useCallback(fn=>{setData(prev=>{const next=typeof fn==="function"?fn(prev):{...prev,...fn};sv(SK,next);return next;});},[]);
+  /* Auto-fill recurring transactions for current month */
+  useEffect(()=>{
+    if(!data||!data.recurringTemplates||data.recurringTemplates.length===0)return;
+    const now=new Date();const cmKey=now.getFullYear()+"-"+pad(now.getMonth()+1);
+    if(data.lastAutoFillMonth===cmKey)return;
+    const rng=mr(now.getFullYear(),now.getMonth());
+    const existing=data.transactions.filter(t=>t.date>=rng.s&&t.date<=rng.e);
+    const toAdd=[];let nid=data.nextId;
+    data.recurringTemplates.filter(t=>t.active!==false).forEach(tpl=>{
+      const already=existing.some(t=>t.category===tpl.category&&t.type===tpl.type&&Math.abs(t.amount-tpl.amount)<0.01&&t.recurring===tpl.id);
+      if(!already){toAdd.push({id:nid++,date:ds(now.getFullYear(),now.getMonth(),1),type:tpl.type,category:tpl.category,currencyCode:tpl.currencyCode,amount:tpl.amount,description:tpl.description||"",recurring:tpl.id});}
+    });
+    if(toAdd.length>0){up(p=>({...p,transactions:[...p.transactions,...toAdd],nextId:nid,lastAutoFillMonth:cmKey}));}
+    else{up(p=>({...p,lastAutoFillMonth:cmKey}));}
+  },[data?.recurringTemplates,data?.lastAutoFillMonth]);
+  const login=u=>{setAuth(u);sv(AK,u);ld(SK).then(d=>setData(d?migrate(d):{...DEF}));};
+  const logout=()=>{setAuth(null);sv(AK,null);setTab("overview");};
+
+  if(loading||auth===undefined)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#08080a",color:"var(--gold)",fontFamily:"'Outfit',sans-serif"}}>Loading…</div>;
+  if(!auth)return <Auth onLogin={login}/>;
+  if(!data)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#08080a",color:"var(--gold)",fontFamily:"'Outfit',sans-serif"}}>Loading…</div>;
+
+  const ps=co(data.primaryCurrency).s;
+  const aI=fl(data.incomeGroups),aE=fl(data.expenseGroups);
+  const notifs=genNotifs(data);
+  const tabs=[
+    {id:"setup",icon:ic.settings,label:"Setup"},
+    {id:"transactions",icon:ic.list,label:"Log"},
+    {id:"overview",icon:ic.chart,label:"Overview"},
+    {id:"goals",icon:ic.target,label:"Goals"},
+  ];
+
+  return(
+    <div style={{minHeight:"100vh",background:"#08080a",color:"var(--txt)",fontFamily:"'Outfit',sans-serif",position:"relative"}}>
+      <div className="grain"/><div className="ambient"/>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/><style>{CSS}</style>
+      <header style={{padding:"14px 20px 0",display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,background:"var(--gold-dim)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid rgba(201,165,92,.15)"}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div><h1 style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,color:"var(--gold)",letterSpacing:"-0.02em"}}>Budget Review</h1><p style={{fontSize:8,color:"var(--txt3)",marginTop:1,textTransform:"uppercase",letterSpacing:"1.5px",fontWeight:500}}>{auth.name} · {co(data.primaryCurrency).c}</p></div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{position:"relative"}}>
+            <button className="btn bg" onClick={()=>setShowNotifs(s=>!s)} style={{display:"flex",alignItems:"center",padding:"5px 8px",position:"relative"}}>{ic.bell}{notifs.length>0&&<span style={{position:"absolute",top:-2,right:-2,background:"var(--red)",color:"#fff",fontSize:8,fontWeight:700,width:14,height:14,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center"}}>{notifs.length}</span>}</button>
+            {showNotifs&&<div style={{position:"absolute",right:0,top:"100%",marginTop:8,width:320,maxHeight:380,overflowY:"auto",background:"rgba(14,14,18,.95)",border:"1px solid var(--brd2)",borderRadius:16,padding:12,zIndex:200,boxShadow:"0 16px 48px rgba(0,0,0,.7)",backdropFilter:"blur(24px)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:10,fontWeight:700,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px"}}>Smart Alerts</span><button className="btn bg" onClick={()=>setShowNotifs(false)} style={{padding:2}}>{ic.xic}</button></div>
+              {notifs.length===0?<p style={{fontSize:11,color:"var(--txt3)",textAlign:"center",padding:16}}>All clear!</p>:notifs.map((n,i)=><div key={i} className={"noti "+n.type} style={{marginBottom:i<notifs.length-1?6:0}}><span style={{fontSize:18,flexShrink:0}}>{n.icon}</span><div><p style={{fontSize:11,fontWeight:600,color:"var(--txt)",marginBottom:2}}>{n.title}</p><p style={{fontSize:10,color:"var(--txt2)",lineHeight:1.4}}>{n.body}</p></div></div>)}
+            </div>}
+          </div>
+          <button className="btn bg" onClick={logout} style={{display:"flex",alignItems:"center",gap:4,fontSize:10}}>{ic.logout}</button>
+        </div>
+      </header>
+      <main style={{padding:"10px 20px 92px",position:"relative",zIndex:1}} onClick={()=>showNotifs&&setShowNotifs(false)}>
+        {tab==="setup"&&<SetupTab data={data} up={up}/>}
+        {tab==="transactions"&&<TxTab data={data} up={up} aI={aI} aE={aE}/>}
+        {tab==="overview"&&<OverviewTab data={data} aI={aI} aE={aE}/>}
+        {tab==="goals"&&<GoalsTab data={data} up={up}/>}
+      </main>
+      <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,12,.92)",borderTop:"1px solid var(--brd)",display:"flex",justifyContent:"center",gap:2,padding:"5px 8px",paddingBottom:"max(5px, env(safe-area-inset-bottom))",zIndex:100,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+        {tabs.map(t=><button key={t.id} className={`nb ${tab===t.id?"ac":""}`} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
+      </nav>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   CATEGORY GROUP
+   ══════════════════════════════════════════════ */
+function CG({group,gi,type,color,up,allN}){
+  const[open,setOpen]=useState(true);const[nc,setNc]=useState("");
+  const gk=type==="income"?"incomeGroups":"expenseGroups";
+  const add=()=>{const v=nc.trim();if(!v||allN.includes(v))return;up(p=>{const g=[...p[gk]];g[gi]={...g[gi],categories:[...g[gi].categories,v]};return{...p,[gk]:g}});setNc("");};
+  const rm=ci=>up(p=>{const g=[...p[gk]];g[gi]={...g[gi],categories:g[gi].categories.filter((_,i)=>i!==ci)};return{...p,[gk]:g}});
+  const rmG=()=>up(p=>({...p,[gk]:p[gk].filter((_,i)=>i!==gi)}));
+  return(
+    <div className="si" style={{marginBottom:5}}>
+      <div className="gh" onClick={()=>setOpen(o=>!o)}><span style={{color,transition:"transform .2s",transform:open?"rotate(0)":"rotate(-90deg)",display:"flex"}}>{ic.chev}</span><span style={{color,display:"flex"}}>{ic.folder}</span><span style={{fontSize:12,fontWeight:600,flex:1}}>{group.name}</span><span style={{fontSize:9,color:"var(--txt3)"}}>{group.categories.length}</span><button className="btn bg" onClick={e=>{e.stopPropagation();rmG();}} style={{padding:"2px 4px"}}>{ic.trash}</button></div>
+      <div className={`gb ${open?"o":"c"}`}><div style={{padding:"5px 0 0 18px"}}>
+        <div style={{display:"flex",gap:4,marginBottom:5}}><input className="inp" placeholder="Add category…" value={nc} onChange={e=>setNc(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} style={{fontSize:11,padding:"6px 9px"}}/><button className="btn bp" onClick={add} style={{padding:"5px 8px",flexShrink:0}}>{ic.plus}</button></div>
+        {group.categories.map((c,ci)=><div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",background:"var(--s1)",borderRadius:5,marginBottom:2}}><span style={{fontSize:11,color:"#ccc"}}>{c}</span><button className="btn bg" onClick={()=>rm(ci)} style={{padding:2}}>{ic.trash}</button></div>)}
+      </div></div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   SETUP TAB
+   ══════════════════════════════════════════════ */
+function SetupTab({data,up}){
+  const[nig,setNig]=useState("");const[neg,setNeg]=useState("");
+  const addG=type=>{const v=type==="income"?nig.trim():neg.trim();if(!v)return;const k=type==="income"?"incomeGroups":"expenseGroups";if(data[k].some(g=>g.name.toLowerCase()===v.toLowerCase()))return;up(p=>({...p,[k]:[...p[k],{name:v,categories:[]}]}));type==="income"?setNig(""):setNeg("");};
+  const allExp=fl(data.expenseGroups);
+  const[selCat,setSelCat]=useState(allExp[0]||"");
+  const bt=data.budgetTargets[selCat]||{monthly:0,rollover:"none",rolloverLimit:0,surplusGoalId:null};
+  const saveBT=(f,v)=>up(p=>({...p,budgetTargets:{...p.budgetTargets,[selCat]:{...bt,[f]:v}}}));
+  const ps=co(data.primaryCurrency).s;
+
+  return(
+    <div className="fu" style={{maxWidth:620,margin:"0 auto"}}>
+      <h2 style={{fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em",fontSize:19,color:"var(--gold)",marginBottom:12}}>Setup</h2>
+      <div className="cd" style={{padding:"14px 18px",marginBottom:8}}>
+        <label style={{fontSize:10,color:"var(--txt3)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:600}}>Primary Currency</label>
+        <select className="inp" value={data.primaryCurrency} onChange={e=>up(p=>({...p,primaryCurrency:e.target.value}))} style={{maxWidth:240,fontSize:12,marginTop:4}}>{CUR.map(c=><option key={c.c} value={c.c}>{c.s} {c.c} - {c.n}</option>)}</select>
+      </div>
+
+      {/* Monthly Savings Target */}
+      <div className="cd" style={{padding:"14px 18px",marginBottom:8,borderLeft:"3px solid #4ade80"}}>
+        <label style={{fontSize:10,color:"var(--grn)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:600}}>Monthly Savings Target</label>
+        <p style={{fontSize:10,color:"var(--txt3)",marginTop:1,marginBottom:6}}>How much do you want to save each month?</p>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input className="inp" type="number" min="0" value={data.monthlySavingsTarget||""} onChange={e=>up({monthlySavingsTarget:Number(e.target.value)||0})} placeholder="0" style={{fontSize:14,fontWeight:600,maxWidth:160}}/>
+          <span style={{fontSize:12,color:"var(--txt3)"}}>{ps} / month</span>
+        </div>
+      </div>
+
+      {/* Budget Targets & Rollover */}
+      <div className="cd" style={{padding:"14px 18px",marginBottom:8}}>
+        <label style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:600}}>Budget Targets & Rollover</label>
+        <p style={{fontSize:10,color:"var(--txt3)",marginTop:1,marginBottom:8}}>Set monthly limits per expense category. Surplus can auto-sweep to a savings goal.</p>
+        {allExp.length===0?<p style={{fontSize:11,color:"var(--txt3)"}}>Add expense categories first.</p>:(
+          <>
+            <select className="inp" value={selCat} onChange={e=>setSelCat(e.target.value)} style={{fontSize:12,marginBottom:6}}>{allExp.map(c=><option key={c} value={c}>{c}{data.budgetTargets[c]?.monthly?` (${ps}${data.budgetTargets[c].monthly}/mo)`:""}</option>)}</select>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+              <div><label style={{fontSize:9,color:"var(--txt3)",textTransform:"uppercase"}}>Monthly ({ps})</label><input className="inp" type="number" min="0" value={bt.monthly||""} onChange={e=>saveBT("monthly",Number(e.target.value)||0)} placeholder="0" style={{fontSize:12,marginTop:2}}/></div>
+              <div><label style={{fontSize:9,color:"var(--txt3)",textTransform:"uppercase"}}>Rollover</label><select className="inp" value={bt.rollover||"none"} onChange={e=>saveBT("rollover",e.target.value)} style={{fontSize:12,marginTop:2}}><option value="none">None</option><option value="full">Full Surplus</option><option value="limited">Limited</option><option value="accumulate">Accumulate</option></select></div>
+            </div>
+            {bt.rollover==="limited"&&<div style={{marginTop:4}}><label style={{fontSize:9,color:"var(--txt3)",textTransform:"uppercase"}}>Max Rollover ({ps})</label><input className="inp" type="number" min="0" value={bt.rolloverLimit||""} onChange={e=>saveBT("rolloverLimit",Number(e.target.value)||0)} style={{fontSize:12,marginTop:2,maxWidth:130}}/></div>}
+            <div style={{marginTop:6}}>
+              <label style={{fontSize:9,color:"var(--grn)",textTransform:"uppercase"}}>Sweep Surplus To Goal</label>
+              <select className="inp" value={bt.surplusGoalId||""} onChange={e=>saveBT("surplusGoalId",e.target.value?Number(e.target.value):null)} style={{fontSize:12,marginTop:2}}>
+                <option value="">No auto-sweep</option>
+                {data.savingsGoals.map(g=><option key={g.id} value={g.id}>{g.name} ({Math.round((g.current/g.target)*100)}%)</option>)}
+              </select>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Recurring Transactions Manager */}
+      <div className="cd" style={{padding:"14px 18px",marginBottom:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div><label style={{fontSize:10,color:"var(--blu)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:600}}>Recurring Transactions</label>
+          <p style={{fontSize:10,color:"var(--txt3)",marginTop:1}}>Auto-added on the 1st of each month.</p></div>
+        </div>
+        {data.recurringTemplates.length===0?<p style={{fontSize:11,color:"var(--txt3)",padding:"8px 0"}}>No recurring items. Add from the Log tab using the repeat button.</p>:(
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            {data.recurringTemplates.map(tpl=>(
+              <div key={tpl.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",background:"var(--s1)",borderRadius:6}}>
+                <span style={{display:"flex",color:"var(--blu)"}}>{ic.repeat}</span>
+                <span className={tpl.type==="Income"?"ti":"te"} style={{fontSize:8}}>{tpl.type==="Income"?"Inc":"Exp"}</span>
+                <span style={{fontSize:11,fontWeight:500,flex:1}}>{tpl.category}</span>
+                <span style={{fontSize:11,fontWeight:600,color:tpl.type==="Income"?"#34d399":"#fb7185"}}>{fm(ps,tpl.amount)}</span>
+                <button className="btn bg" onClick={()=>up(p=>({...p,recurringTemplates:p.recurringTemplates.map(t=>t.id===tpl.id?{...t,active:!t.active}:t)}))} style={{padding:"2px 6px",fontSize:9,color:tpl.active!==false?"#34d399":"#666"}}>{tpl.active!==false?"On":"Off"}</button>
+                <button className="btn bd" onClick={()=>up(p=>({...p,recurringTemplates:p.recurringTemplates.filter(t=>t.id!==tpl.id)}))} style={{padding:"2px 4px"}}>{ic.trash}</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="bg2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {[{type:"income",color:"var(--grn)",groups:data.incomeGroups,nv:nig,setNv:setNig},{type:"expense",color:"var(--red)",groups:data.expenseGroups,nv:neg,setNv:setNeg}].map(col=>(
+          <div key={col.type} className="cd" style={{padding:"14px 18px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><label style={{fontSize:10,color:col.color,textTransform:"uppercase",letterSpacing:"1px",fontWeight:600}}>{col.type}</label><span style={{fontSize:9,color:"var(--txt3)"}}>{col.groups.length}g · {fl(col.groups).length}c</span></div>
+            <div style={{display:"flex",gap:4,marginBottom:6}}><input className="inp" placeholder="New group…" value={col.nv} onChange={e=>col.setNv(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addG(col.type)} style={{fontSize:11,padding:"6px 9px"}}/><button className="btn bp" onClick={()=>addG(col.type)} style={{padding:"5px 8px",flexShrink:0,fontSize:10}}>{ic.plus}</button></div>
+            <div style={{maxHeight:260,overflowY:"auto"}}>{col.groups.map((g,gi)=><CG key={g.name} group={g} gi={gi} type={col.type} color={col.color} up={up} allN={fl(col.groups)}/>)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   TRANSACTIONS TAB (with search + CSV export)
+   ══════════════════════════════════════════════ */
+function TxTab({data,up,aI,aE}){
+  const now=new Date();
+  const[form,setForm]=useState({date:ds(now.getFullYear(),now.getMonth(),now.getDate()),type:"Expense",category:"",currencyCode:data.primaryCurrency,amount:"",description:""});
+  const[sortDir,setSortDir]=useState("desc");
+  const[search,setSearch]=useState("");
+  const[editId,setEditId]=useState(null);
+  const[editForm,setEditForm]=useState({});
+  const[showRec,setShowRec]=useState(false);
+  const[recForm,setRecForm]=useState({type:"Expense",category:"",currencyCode:data.primaryCurrency,amount:"",description:""});
+  const cats=form.type==="Income"?aI:aE;
+  const groups=form.type==="Income"?data.incomeGroups:data.expenseGroups;
+  const ps=co(data.primaryCurrency).s;
+  const allCats=[...aI,...aE];
+
+  useEffect(()=>{if(form.category&&!cats.includes(form.category))setForm(f=>({...f,category:""}));},[form.type,form.category,cats]);
+
+  const add=()=>{if(!form.date||!form.category||!form.amount||Number(form.amount)<=0||data.transactions.length>=2000)return;const tx={id:data.nextId,date:form.date,type:form.type,category:form.category,currencyCode:form.currencyCode,amount:parseFloat(parseFloat(form.amount).toFixed(2)),description:form.description.trim()};up(p=>({...p,transactions:[...p.transactions,tx],nextId:p.nextId+1}));setForm(f=>({...f,category:"",amount:"",description:""}));};
+  const addRecurring=(tx)=>{
+    const already=(data.recurringTemplates||[]).some(t=>t.category===tx.category&&t.type===tx.type&&Math.abs(t.amount-tx.amount)<0.01);
+    if(already)return;
+    up(p=>({...p,recurringTemplates:[...(p.recurringTemplates||[]),{id:p.nextTplId||1,type:tx.type,category:tx.category,currencyCode:tx.currencyCode,amount:tx.amount,description:tx.description||"",active:true}],nextTplId:(p.nextTplId||1)+1}));
+  };
+  const addRecFromForm=()=>{
+    if(!recForm.category||!recForm.amount||Number(recForm.amount)<=0)return;
+    const already=(data.recurringTemplates||[]).some(t=>t.category===recForm.category&&t.type===recForm.type&&Math.abs(t.amount-Number(recForm.amount))<0.01);
+    if(already)return;
+    up(p=>({...p,recurringTemplates:[...(p.recurringTemplates||[]),{id:p.nextTplId||1,type:recForm.type,category:recForm.category,currencyCode:recForm.currencyCode,amount:parseFloat(parseFloat(recForm.amount).toFixed(2)),description:recForm.description||"",active:true}],nextTplId:(p.nextTplId||1)+1}));
+    setRecForm(f=>({...f,category:"",amount:"",description:""}));
+  };
+  const rmRec=id=>up(p=>({...p,recurringTemplates:(p.recurringTemplates||[]).filter(t=>t.id!==id)}));
+  const toggleRec=id=>up(p=>({...p,recurringTemplates:(p.recurringTemplates||[]).map(t=>t.id===id?{...t,active:!t.active}:t)}));
+  const rm=id=>up(p=>({...p,transactions:p.transactions.filter(t=>t.id!==id)}));
+  const startEdit=tx=>{setEditId(tx.id);setEditForm({...tx});};
+  const saveEdit=()=>{if(!editForm.category||!editForm.amount||Number(editForm.amount)<=0)return;up(p=>({...p,transactions:p.transactions.map(t=>t.id===editId?{...editForm,amount:parseFloat(parseFloat(editForm.amount).toFixed(2))}:t)}));setEditId(null);};
+  const cancelEdit=()=>setEditId(null);
+
+  const sorted=useMemo(()=>{
+    let arr=[...data.transactions];
+    if(search){const q=search.toLowerCase();arr=arr.filter(t=>t.category.toLowerCase().includes(q)||t.description.toLowerCase().includes(q)||(t.type.toLowerCase().includes(q)));}
+    return arr.sort((a,b)=>sortDir==="desc"?b.date.localeCompare(a.date)||b.id-a.id:a.date.localeCompare(b.date)||a.id-b.id);
+  },[data.transactions,sortDir,search]);
+
+  const exportCSV=()=>{
+    const rows=["Date,Type,Category,Amount,Currency,Description"];
+    data.transactions.forEach(t=>rows.push(`${t.date},${t.type},${t.category},${t.amount},${t.currencyCode||data.primaryCurrency},"${t.description||""}"`));
+    const blob=new Blob([rows.join("\n")],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="budget_export.csv";a.click();URL.revokeObjectURL(url);
+  };
+
+  return(
+    <div className="fu" style={{maxWidth:720,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:6}}>
+        <h2 style={{fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em",fontSize:19,color:"var(--gold)"}}>Transactions</h2>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <button className="btn bg" onClick={exportCSV} style={{display:"flex",alignItems:"center",gap:3,fontSize:10}}>{ic.download} CSV</button>
+          <button className="btn bg" onClick={()=>setSortDir(d=>d==="desc"?"asc":"desc")} style={{fontSize:10}}>{sortDir==="desc"?"Newest":"Oldest"}</button>
+        </div>
+      </div>
+      <div className="cd" style={{padding:"10px 14px",marginBottom:8}}>
+        <div className="tfg" style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 75px 90px 1fr auto",gap:4,alignItems:"end"}}>
+          {[
+            {l:"Date",el:<input className="inp" type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{fontSize:11,padding:"6px 8px"}}/>},
+            {l:"Type",el:<select className="inp" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,category:""}))} style={{fontSize:11,padding:"6px 8px"}}><option value="Income">Income</option><option value="Expense">Expense</option></select>},
+            {l:"Category",el:<select className="inp" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{fontSize:11,padding:"6px 8px"}}><option value="">Select…</option>{groups.map(g=><optgroup key={g.name} label={g.name}>{g.categories.map(c=><option key={c} value={c}>{c}</option>)}</optgroup>)}</select>},
+            {l:"Cur",el:<select className="inp" value={form.currencyCode} onChange={e=>setForm(f=>({...f,currencyCode:e.target.value}))} style={{fontSize:11,padding:"6px 8px"}}>{CUR.map(c=><option key={c.c} value={c.c}>{c.c}</option>)}</select>},
+            {l:"Amount",el:<input className="inp" type="number" step=".01" min="0" placeholder="0.00" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&add()} style={{fontSize:11,padding:"6px 8px"}}/>},
+            {l:"Note",el:<input className="inp" placeholder="Optional…" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&add()} style={{fontSize:11,padding:"6px 8px"}}/>},
+          ].map((f,i)=><div key={i}><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",letterSpacing:".6px",display:"block",marginBottom:1}}>{f.l}</label>{f.el}</div>)}
+          <button className="btn bp" onClick={add} style={{padding:"6px 10px"}}>{ic.plus}</button>
+        </div>
+      </div>
+      {/* Search */}
+      <div style={{position:"relative",marginBottom:8}}><span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"var(--txt3)",display:"flex"}}>{ic.search}</span><input className="inp" placeholder="Search transactions…" value={search} onChange={e=>setSearch(e.target.value)} style={{fontSize:12,paddingLeft:32}}/></div>
+
+      {/* Recurring Transactions Section */}
+      <div className="cd" style={{padding:0,marginBottom:8,overflow:"hidden",borderColor:showRec?"#1e3a5f":"var(--s2)",transition:"border-color .3s"}}>
+        <button onClick={()=>setShowRec(s=>!s)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"none",border:"none",color:"var(--txt)",cursor:"pointer",fontSize:11,fontWeight:600}}>
+          <span style={{color:"var(--blu)",display:"flex"}}>{ic.repeat}</span>
+          <span style={{flex:1,textAlign:"left"}}>Recurring Transactions</span>
+          <span style={{fontSize:9,color:"var(--blu)",background:"#1a2540",padding:"2px 8px",borderRadius:10}}>{(data.recurringTemplates||[]).filter(t=>t.active!==false).length} active</span>
+          <span style={{color:"var(--txt3)",transform:showRec?"rotate(180deg)":"rotate(0)",transition:"transform .2s",display:"flex"}}>{ic.chev}</span>
+        </button>
+        {showRec&&(
+          <div style={{padding:"0 14px 12px"}}>
+            <p style={{fontSize:10,color:"var(--txt3)",marginBottom:8}}>These are auto-added on the 1st of each month. Add new ones here or click the repeat icon on any transaction.</p>
+
+            {/* Add recurring form */}
+            <div style={{display:"grid",gridTemplateColumns:"80px 1fr 75px 90px 1fr auto",gap:4,alignItems:"end",marginBottom:10}}>
+              <div><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",display:"block",marginBottom:1}}>Type</label><select className="inp" value={recForm.type} onChange={e=>setRecForm(f=>({...f,type:e.target.value,category:""}))} style={{fontSize:10,padding:"5px 6px"}}><option value="Income">Income</option><option value="Expense">Expense</option></select></div>
+              <div><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",display:"block",marginBottom:1}}>Category</label><select className="inp" value={recForm.category} onChange={e=>setRecForm(f=>({...f,category:e.target.value}))} style={{fontSize:10,padding:"5px 6px"}}><option value="">Select...</option>{(recForm.type==="Income"?data.incomeGroups:data.expenseGroups).map(g=><optgroup key={g.name} label={g.name}>{g.categories.map(c=><option key={c} value={c}>{c}</option>)}</optgroup>)}</select></div>
+              <div><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",display:"block",marginBottom:1}}>Cur</label><select className="inp" value={recForm.currencyCode} onChange={e=>setRecForm(f=>({...f,currencyCode:e.target.value}))} style={{fontSize:10,padding:"5px 6px"}}>{CUR.map(c=><option key={c.c} value={c.c}>{c.c}</option>)}</select></div>
+              <div><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",display:"block",marginBottom:1}}>Amount</label><input className="inp" type="number" step=".01" min="0" placeholder="0.00" value={recForm.amount} onChange={e=>setRecForm(f=>({...f,amount:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addRecFromForm()} style={{fontSize:10,padding:"5px 6px"}}/></div>
+              <div><label style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase",display:"block",marginBottom:1}}>Note</label><input className="inp" placeholder="Optional..." value={recForm.description} onChange={e=>setRecForm(f=>({...f,description:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addRecFromForm()} style={{fontSize:10,padding:"5px 6px"}}/></div>
+              <button className="btn bp" onClick={addRecFromForm} style={{padding:"5px 8px"}}>{ic.plus}</button>
+            </div>
+
+            {/* Recurring templates list */}
+            {(data.recurringTemplates||[]).length===0?<p style={{fontSize:11,color:"var(--txt3)",textAlign:"center",padding:"8px 0"}}>No recurring items yet.</p>:(
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                {(data.recurringTemplates||[]).map(tpl=>(
+                  <div key={tpl.id} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:tpl.active!==false?"#0f1520":"#111",borderRadius:6,border:"1px solid",borderColor:tpl.active!==false?"#1e3a5f":"var(--s2)"}}>
+                    <span style={{display:"flex",color:tpl.active!==false?"#60a5fa":"#444"}}>{ic.repeat}</span>
+                    <span className={tpl.type==="Income"?"ti":"te"} style={{fontSize:8}}>{tpl.type==="Income"?"Inc":"Exp"}</span>
+                    <span style={{fontSize:11,fontWeight:500,flex:1,color:tpl.active!==false?"#e8e0d4":"#666"}}>{tpl.category}</span>
+                    {tpl.description&&<span style={{fontSize:9,color:"var(--txt3)",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tpl.description}</span>}
+                    <span style={{fontSize:11,fontWeight:600,color:tpl.type==="Income"?"#34d399":"#fb7185",opacity:tpl.active!==false?1:0.4}}>{fm(ps,tpl.amount)}</span>
+                    <button className="btn" onClick={()=>toggleRec(tpl.id)} style={{padding:"3px 8px",fontSize:9,fontWeight:600,borderRadius:4,background:tpl.active!==false?"#1a2e1a":"var(--s2)",color:tpl.active!==false?"#34d399":"#666"}}>{tpl.active!==false?"Active":"Paused"}</button>
+                    <button className="btn bd" onClick={()=>rmRec(tpl.id)} style={{padding:"2px 4px"}}>{ic.trash}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {sorted.length===0?<div className="cd" style={{padding:"32px 18px",textAlign:"center"}}><p style={{color:"var(--txt3)",fontSize:12}}>{search?"No matches.":"No transactions yet."}</p></div>:(
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          {sorted.slice(0,100).map((tx,i)=>{const ts=co(tx.currencyCode||data.primaryCurrency).s;const cv=cx(tx.amount,tx.currencyCode||data.primaryCurrency,data.primaryCurrency);const diff=(tx.currencyCode||data.primaryCurrency)!==data.primaryCurrency;
+            if(editId===tx.id)return(<div key={tx.id} className="cd" style={{padding:"8px 12px",borderColor:"rgba(201,165,92,.4)"}}>
+              <div style={{display:"grid",gridTemplateColumns:"95px 80px 1fr 90px 1fr",gap:4,alignItems:"center",marginBottom:6}}>
+                <input className="inp" type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} style={{fontSize:10,padding:"4px 6px"}}/>
+                <select className="inp" value={editForm.type} onChange={e=>setEditForm(f=>({...f,type:e.target.value}))} style={{fontSize:10,padding:"4px 6px"}}><option value="Income">Income</option><option value="Expense">Expense</option></select>
+                <select className="inp" value={editForm.category} onChange={e=>setEditForm(f=>({...f,category:e.target.value}))} style={{fontSize:10,padding:"4px 6px"}}>{allCats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                <input className="inp" type="number" step=".01" value={editForm.amount} onChange={e=>setEditForm(f=>({...f,amount:e.target.value}))} style={{fontSize:10,padding:"4px 6px"}}/>
+                <input className="inp" value={editForm.description||""} onChange={e=>setEditForm(f=>({...f,description:e.target.value}))} placeholder="Note" style={{fontSize:10,padding:"4px 6px"}}/>
+              </div>
+              <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}><button className="btn bs" onClick={saveEdit} style={{display:"flex",alignItems:"center",gap:3}}>{ic.check} Save</button><button className="btn bg" onClick={cancelEdit} style={{display:"flex",alignItems:"center",gap:3}}>{ic.xic} Cancel</button></div>
+            </div>);
+            return(
+            <div key={tx.id} className="cd si" style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",fontSize:11,animationDelay:`${Math.min(i,15)*.02}s`}}>
+              <span style={{color:"var(--txt3)",fontSize:10,minWidth:50}}>{fd(tx.date)}</span>
+              <span className={tx.type==="Income"?"ti":"te"}>{tx.type==="Income"?"Inc":"Exp"}</span>
+              <span style={{fontWeight:500,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.category}</span>
+              <div style={{textAlign:"right",minWidth:80}}>
+                <span style={{fontWeight:600,color:tx.type==="Income"?"#34d399":"#fb7185",fontVariantNumeric:"tabular-nums"}}>{fm(ts,tx.amount)}</span>
+                {diff&&<div style={{fontSize:8,color:"var(--txt3)"}}>{fm(ps,cv)}</div>}
+              </div>
+              <span style={{color:"var(--txt3)",fontSize:10,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.description}</span>
+              {tx.recurring&&<span style={{color:"var(--blu)",display:"flex",flexShrink:0}} title="Recurring">{ic.repeat}</span>}
+              {!tx.recurring&&!(data.recurringTemplates||[]).some(t=>t.category===tx.category&&t.type===tx.type&&Math.abs(t.amount-tx.amount)<0.01)&&<button className="btn bg" onClick={()=>addRecurring(tx)} title="Make recurring" style={{padding:"2px 4px",color:"var(--blu)"}}>{ic.repeat}</button>}
+              <button className="btn bg" onClick={()=>startEdit(tx)} style={{padding:"2px 4px"}}>{ic.edit}</button>
+              <button className="btn bd" onClick={()=>rm(tx.id)} style={{padding:"2px 4px"}}>{ic.trash}</button>
+            </div>
+          );})}
+          {sorted.length>100&&<p style={{textAlign:"center",fontSize:10,color:"var(--txt3)",padding:8}}>Showing 100 of {sorted.length}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   CUSTOM TOOLTIP
+   ══════════════════════════════════════════════ */
+const CTip=({active,payload,label,sym})=>{if(!active||!payload?.length)return null;return <div style={{background:"var(--s1)",border:"1px solid #333",borderRadius:8,padding:"7px 11px"}}>{label&&<p style={{color:"var(--gold)",fontWeight:600,fontSize:10,marginBottom:2}}>{label}</p>}{payload.map((p,i)=><p key={i} style={{color:p.color||"#e8e0d4",fontSize:10}}>{p.name}: {fm(sym,p.value)}</p>)}</div>;};
+
+/* ══════════════════════════════════════════════
+   OVERVIEW TAB (enhanced charts)
+   ══════════════════════════════════════════════ */
+function OverviewTab({data,aI,aE}){
+  const now=new Date();const[month,setMonth]=useState(now.getMonth());const[year,setYear]=useState(now.getFullYear());
+  const pc=data.primaryCurrency,ps=co(pc).s;
+
+  const calc=useMemo(()=>{
+    const rng=mr(year,month);const f=data.transactions.filter(t=>t.date>=rng.s&&t.date<=rng.e);
+    const cv=t=>cx(t.amount||0,t.currencyCode||pc,pc);
+    const iT=aI.map(cat=>({category:cat,total:f.filter(t=>t.type==="Income"&&t.category===cat).reduce((s,t)=>s+cv(t),0)}));
+    const eT=aE.map(cat=>({category:cat,total:f.filter(t=>t.type==="Expense"&&t.category===cat).reduce((s,t)=>s+cv(t),0)}));
+    const tI=iT.reduce((s,x)=>s+x.total,0),tE=eT.reduce((s,x)=>s+x.total,0);
+    const iP=iT.filter(x=>x.total>0).map((x,i)=>({name:x.category,value:Math.round(x.total*100)/100,fill:IG[i%IG.length]}));
+    const eP=eT.filter(x=>x.total>0).map((x,i)=>({name:x.category,value:Math.round(x.total*100)/100,fill:EG[i%EG.length]}));
+    // 6-month trend
+    const bars=[],trend=[];
+    for(let o=5;o>=0;o--){let m2=month-o,y2=year;if(m2<0){m2+=12;y2--}const rr=mr(y2,m2);const mf=data.transactions.filter(t=>t.date>=rr.s&&t.date<=rr.e);const inc=mf.filter(t=>t.type==="Income").reduce((s,t)=>s+cx(t.amount||0,t.currencyCode||pc,pc),0);const exp=mf.filter(t=>t.type==="Expense").reduce((s,t)=>s+cx(t.amount||0,t.currencyCode||pc,pc),0);bars.push({name:MS[m2],Income:Math.round(inc),Expenses:Math.round(exp)});trend.push({name:MS[m2],Balance:Math.round(inc-exp)});}
+    const rollovers=aE.map(cat=>({category:cat,...(calcRoll(data,cat,year,month)||{budget:0,spent:0,surplus:0,ra:0,rt:"none"})})).filter(x=>x.budget>0);
+    const recurring=detectRec(data.transactions,pc);
+    const heatmap=[0,0,0,0,0,0,0];
+    f.filter(t=>t.type==="Expense").forEach(t=>{const d=new Date(t.date+"T12:00:00").getDay();heatmap[d]+=cv(t);});
+    return{iT,eT,tI,tE,bal:tI-tE,cnt:f.length,iP,eP,bars,trend,rollovers,recurring,heatmap};
+  },[data,month,year,aI,aE,pc]);
+
+  const{iT:incT,eT:expT,tI,tE,bal,cnt,iP,eP,bars,trend,rollovers,recurring,heatmap}=calc;
+  const cy=now.getFullYear();const tY=data.transactions.map(t=>parseInt(t.date.slice(0,4)));const aY=[cy-2,cy+1,...tY];const yrs=[];for(let y=Math.min(...aY);y<=Math.max(...aY);y++)yrs.push(y);
+  const maxH=Math.max(...heatmap,1);
+
+  // Donut center label as overlay div
+  const DonutCenter=({value,label,color})=>(
+    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-54%)",textAlign:"center",pointerEvents:"none"}}>
+      <div style={{fontSize:13,fontWeight:700,color,fontFamily:"'Outfit',sans-serif"}}>{fm(ps,value)}</div>
+      <div style={{fontSize:8,color:"var(--txt3)"}}>{label}</div>
+    </div>
+  );
+
+  return(
+    <div className="fu" style={{maxWidth:720,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:6}}>
+        <div><h2 style={{fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em",fontSize:19,color:"var(--gold)"}}>Overview</h2><p style={{fontSize:10,color:"var(--txt3)",marginTop:1}}>{cnt} txns · {MO[month]} {year}</p></div>
+        <div style={{display:"flex",gap:4}}><select className="inp" value={month} onChange={e=>setMonth(Number(e.target.value))} style={{fontSize:11,width:105}}>{MO.map((m,i)=><option key={i} value={i}>{m}</option>)}</select><select className="inp" value={year} onChange={e=>setYear(Number(e.target.value))} style={{fontSize:11,width:70}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select></div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="sg" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:10}}>
+        {[{l:"Income",v:tI,c:"#34d399"},{l:"Expenses",v:tE,c:"#fb7185"},{l:"Balance",v:bal,c:bal>=0?"#c9a55c":"#fb7185"}].map(x=>(
+          <div key={x.l} className="cd" style={{padding:"14px 18px",borderLeft:`3px solid ${x.c}`}}><p style={{fontSize:9,color:x.c,textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:2}}>{x.l}</p><ANum value={x.v} sym={ps} color={x.c}/></div>
+        ))}
+      </div>
+
+      {/* Savings Target Progress */}
+      {data.monthlySavingsTarget>0&&(
+        <div className="cd" style={{padding:"12px 16px",marginBottom:10,borderLeft:"3px solid #4ade80"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <span style={{fontSize:10,color:"var(--grn)",textTransform:"uppercase",fontWeight:700}}>Monthly Savings Target</span>
+            <span style={{fontSize:11,fontWeight:600,color:bal>=data.monthlySavingsTarget?"#34d399":"#fb923c"}}>{fm(ps,bal)} / {fm(ps,data.monthlySavingsTarget)}</span>
+          </div>
+          <div style={{background:"var(--s1)",borderRadius:4,height:6,overflow:"hidden"}}>
+            <div style={{background:bal>=data.monthlySavingsTarget?"linear-gradient(90deg,#16a34a,#4ade80)":"linear-gradient(90deg,#b08030,#d4a053)",height:"100%",width:`${Math.min(Math.max((bal/data.monthlySavingsTarget)*100,0),100)}%`,borderRadius:4,transition:"width .5s"}}/>
+          </div>
+          <p style={{fontSize:9,color:"var(--txt3)",marginTop:3}}>{bal>=data.monthlySavingsTarget?"On track! Savings target met this month.":bal>0?"Keep going - "+fm(ps,data.monthlySavingsTarget-bal)+" more to reach target.":"Spending exceeds income this month."}</p>
+        </div>
+      )}
+
+      {/* Donut Charts */}
+      <div className="cg" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+        {[{title:"Income",d:iP,c:"#34d399",total:tI,empty:"No income"},{title:"Expenses",d:eP,c:"#fb7185",total:tE,empty:"No expenses"}].map(ch=>(
+          <div key={ch.title} className="cd" style={{padding:"12px 16px"}}>
+            <h3 style={{fontSize:10,color:ch.c,textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:6}}>{ch.title}</h3>
+            {ch.d.length===0?<p style={{fontSize:11,color:"var(--txt3)",textAlign:"center",padding:14}}>{ch.empty}</p>:(
+              <div style={{position:"relative"}}>
+                <ResponsiveContainer width="100%" height={170}>
+                  <PieChart><Pie data={ch.d} dataKey="value" cx="50%" cy="50%" innerRadius={42} outerRadius={68} paddingAngle={3} stroke="none" startAngle={90} endAngle={-270}>{ch.d.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Pie><Tooltip content={<CTip sym={ps}/>}/><Legend wrapperStyle={{fontSize:9,color:"#888"}}/></PieChart>
+                </ResponsiveContainer>
+                <DonutCenter value={ch.total} label={ch.title} color={ch.c}/>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 6-Month Bar Chart */}
+      <div className="cd" style={{padding:"12px 16px",marginBottom:10}}>
+        <h3 style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:6}}>6-Month Income vs Expenses</h3>
+        <ResponsiveContainer width="100%" height={170}><BarChart data={bars} barGap={2}><XAxis dataKey="name" tick={{fill:"#6b6560",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#555049",fontSize:8}} axisLine={false} tickLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/><Tooltip content={<CTip sym={ps}/>} cursor={{fill:"var(--s1)"}}/><Bar dataKey="Income" fill="var(--grn)" radius={[3,3,0,0]} maxBarSize={22}/><Bar dataKey="Expenses" fill="var(--red)" radius={[3,3,0,0]} maxBarSize={22}/><Legend wrapperStyle={{fontSize:9,color:"#888"}}/></BarChart></ResponsiveContainer>
+      </div>
+
+      {/* Balance Trend Line */}
+      <div className="cd" style={{padding:"12px 16px",marginBottom:10}}>
+        <h3 style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:6}}>Balance Trend</h3>
+        <ResponsiveContainer width="100%" height={130}><AreaChart data={trend}><XAxis dataKey="name" tick={{fill:"#6b6560",fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#555049",fontSize:8}} axisLine={false} tickLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/><Tooltip content={<CTip sym={ps}/>}/><Area type="monotone" dataKey="Balance" stroke="var(--gold)" strokeWidth={2} fill="var(--gold)" fillOpacity={0.15} dot={{fill:"#c9a55c",r:3,strokeWidth:0}}/></AreaChart></ResponsiveContainer>
+      </div>
+
+      {/* Budget Gauges */}
+      {heatmap.some(v=>v>0)&&(
+        <div className="cd" style={{padding:"12px 16px",marginBottom:10}}>
+          <h3 style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:8}}>Spending by Day of Week</h3>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+            {DOW.map((d,i)=>{const int=maxH>0?heatmap[i]/maxH:0;const bg=int>0.7?"#e11d48":int>0.4?"#f97316":int>0.1?"#c9a55c":"var(--s2)";return(
+              <div key={d} style={{textAlign:"center"}}>
+                <div style={{background:bg,borderRadius:6,padding:"10px 0",marginBottom:3,opacity:int>0?0.3+int*0.7:0.2}}>
+                  <span style={{fontSize:10,fontWeight:600,color:"#fff"}}>{fm(ps,heatmap[i])}</span>
+                </div>
+                <span style={{fontSize:8,color:"var(--txt3)"}}>{d}</span>
+              </div>
+            );})}
+          </div>
+        </div>
+      )}
+
+      {/* Budget Tracking */}
+      {rollovers.length>0&&(
+        <div className="cd" style={{padding:"12px 16px",marginBottom:10}}>
+          <h3 style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:6}}>Budget Tracking</h3>
+          {rollovers.map((r,i)=>{const pct=r.budget>0?Math.min((r.spent/r.budget)*100,150):0;const over=r.spent>r.budget;const color=pct<60?"#34d399":pct<90?"#c9a55c":"#fb7185";return(
+            <div key={r.category} style={{marginBottom:i<rollovers.length-1?8:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:11,fontWeight:500}}>{r.category}</span><span style={{fontSize:10,color:over?"#fb7185":"#34d399"}}>{fm(ps,r.spent)} / {fm(ps,r.budget)}</span></div>
+              <div style={{background:"var(--s1)",borderRadius:4,height:6,overflow:"hidden",position:"relative"}}><div style={{background:`linear-gradient(90deg,${color}88,${color})`,height:"100%",width:`${Math.min(pct,100)}%`,borderRadius:4,transition:"width .5s"}}/></div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:1}}><span style={{fontSize:8,color:"var(--txt3)"}}>{r.rt!=="none"?`Rollover: ${r.rt}`:"No rollover"}</span>{r.ra>0&&<span style={{fontSize:8,color:"var(--gold)"}}>+{fm(ps,r.ra)} next month</span>}</div>
+            </div>
+          );})}
+        </div>
+      )}
+
+      {/* Recurring */}
+      {recurring.length>0&&(
+        <div className="cd" style={{padding:"12px 16px",marginBottom:10}}>
+          <h3 style={{fontSize:10,color:"var(--gold)",textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:6}}>Recurring Bills</h3>
+          {recurring.slice(0,5).map((p,i)=>(
+            <div key={p.category} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<Math.min(recurring.length,5)-1?"1px solid #1e1e1e":"none"}}>
+              <div><span style={{fontSize:11,fontWeight:500}}>{p.category}</span><span style={{fontSize:9,color:"var(--txt3)",marginLeft:5}}>~{Math.round(p.avgInterval)}d</span></div>
+              <div style={{textAlign:"right"}}><span style={{fontSize:11,fontWeight:600,color:"var(--red)"}}>~{fm(ps,p.avgAmount)}</span><div style={{fontSize:8,color:"var(--txt3)"}}>Next: ~{p.nextDate.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Category Tables */}
+      <div className="bg2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+        {[{title:"Income",data:incT,color:"var(--grn)",total:tI},{title:"Expenses",data:expT,color:"var(--red)",total:tE}].map(col=>(
+          <div key={col.title} className="cd" style={{padding:"12px 16px"}}>
+            <h3 style={{fontSize:10,color:col.color,textTransform:"uppercase",letterSpacing:"1px",fontWeight:700,marginBottom:8}}>{col.title}</h3>
+            {col.data.map(c=><div key={c.category} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #1a1a1a"}}><span style={{fontSize:11,color:c.total>0?"#e8e0d4":"#444"}}>{c.category}</span><span style={{fontSize:11,fontWeight:600,color:c.total>0?col.color:"#333",fontVariantNumeric:"tabular-nums"}}>{fm(ps,c.total)}</span></div>)}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 2px",borderTop:"2px solid #2a2a2a",marginTop:2}}><span style={{fontSize:11,fontWeight:700,color:col.color}}>Total</span><span style={{fontSize:12,fontWeight:700,color:col.color,fontVariantNumeric:"tabular-nums"}}>{fm(ps,col.total)}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   SAVINGS GOALS TAB
+   ══════════════════════════════════════════════ */
+function GoalsTab({data,up}){
+  const[showForm,setShowForm]=useState(false);
+  const[gf,setGf]=useState({name:"",target:"",monthlyContrib:""});
+  const ps=co(data.primaryCurrency).s;
+  const pc=data.primaryCurrency;
+  const health=useMemo(()=>calcHealth(data),[data]);
+
+  const addGoal=()=>{if(!gf.name.trim()||!gf.target||Number(gf.target)<=0)return;up(p=>({...p,savingsGoals:[...p.savingsGoals,{id:p.nextGoalId,name:gf.name.trim(),target:Number(gf.target),current:0,monthlyContrib:Number(gf.monthlyContrib)||0,createdAt:new Date().toISOString()}],nextGoalId:p.nextGoalId+1}));setGf({name:"",target:"",monthlyContrib:""});setShowForm(false);};
+  const contribute=(id,amt)=>up(p=>({...p,savingsGoals:p.savingsGoals.map(g=>g.id===id?{...g,current:Math.min(g.current+amt,g.target)}:g)}));
+  const rmGoal=id=>up(p=>({...p,savingsGoals:p.savingsGoals.filter(g=>g.id!==id)}));
+  const totalSaved=data.savingsGoals.reduce((s,g)=>s+g.current,0);
+  const totalTarget=data.savingsGoals.reduce((s,g)=>s+g.target,0);
+  const getCol=s=>s>=80?"#34d399":s>=60?"#c9a55c":s>=40?"#f97316":"#fb7185";
+
+  /* Calculate budget surplus available to sweep */
+  const now2=new Date();const rng2=mr(now2.getFullYear(),now2.getMonth());
+  const mTx2=data.transactions.filter(t=>t.date>=rng2.s&&t.date<=rng2.e);
+  const surplusByCat=[];let totalSurplus=0;
+  Object.entries(data.budgetTargets).forEach(([cat,cfg])=>{
+    if(cfg.monthly<=0)return;
+    const sp=mTx2.filter(t=>t.type==="Expense"&&t.category===cat).reduce((s,t)=>s+cx(t.amount,t.currencyCode||pc,pc),0);
+    const diff=cfg.monthly-sp;
+    if(diff>0){surplusByCat.push({cat,surplus:diff,goalId:cfg.surplusGoalId||null});totalSurplus+=diff;}
+  });
+  const sweepAll=()=>{
+    if(totalSurplus<=0||data.savingsGoals.length===0)return;
+    up(p=>{
+      const goals=[...p.savingsGoals];
+      surplusByCat.forEach(s=>{
+        let gIdx=-1;
+        if(s.goalId)gIdx=goals.findIndex(g=>g.id===s.goalId);
+        if(gIdx<0)gIdx=0;
+        if(gIdx>=0)goals[gIdx]={...goals[gIdx],current:Math.min(goals[gIdx].current+s.surplus,goals[gIdx].target)};
+      });
+      return{...p,savingsGoals:goals};
+    });
+  };
+
+  return(
+    <div className="fu" style={{maxWidth:600,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <h2 style={{fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em",fontSize:19,color:"var(--gold)"}}>Goals & Score</h2>
+        <button className="btn bp" onClick={()=>setShowForm(s=>!s)} style={{fontSize:11,padding:"5px 12px"}}>{ic.plus} Goal</button>
+      </div>
+
+      {/* Health Score Card */}
+      <div className="cd" style={{padding:"18px 20px",marginBottom:10,background:"linear-gradient(135deg,rgba(201,165,92,.04),rgba(14,14,18,.8))",borderColor:"rgba(201,165,92,.1)",textAlign:"center"}}>
+        <div style={{position:"relative",width:110,height:110,margin:"0 auto 8px"}}>
+          <svg width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="46" fill="none" stroke="rgba(255,255,255,.03)" strokeWidth="8"/><circle cx="55" cy="55" r="46" fill="none" stroke={getCol(health.overall)} strokeWidth="8" strokeDasharray={`${(health.overall/100)*289} 289`} strokeLinecap="round" transform="rotate(-90 55 55)" style={{transition:"stroke-dasharray .8s"}}/></svg>
+          <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:getCol(health.overall)}}>{health.overall}</div><div style={{fontSize:8,color:"#888"}}>/100</div></div>
+        </div>
+        <p style={{fontSize:13,fontWeight:600,color:getCol(health.overall)}}>{health.overall>=80?"Excellent":health.overall>=60?"Good":health.overall>=40?"Fair":"Needs Work"}</p>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginTop:10}}>
+          {[{l:"Savings",s:health.savings.score},{l:"Budget",s:health.adherence.score},{l:"Consist.",s:health.consistency.score},{l:"Goals",s:health.goals.score}].map(m=>(
+            <div key={m.l}><div style={{fontSize:8,color:"var(--txt3)",textTransform:"uppercase"}}>{m.l}</div><div style={{fontSize:14,fontWeight:700,color:getCol(m.s)}}>{m.s}</div></div>
+          ))}
+        </div>
+      </div>
+
+      {/* Total savings */}
+      {data.savingsGoals.length>0&&(
+        <div className="cd" style={{padding:"14px 18px",marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><p style={{fontSize:9,color:"var(--gold)",textTransform:"uppercase",fontWeight:700}}>Total Saved</p><p style={{fontSize:20,fontWeight:700,color:"var(--gold)"}}>{fm(ps,totalSaved)}</p></div>
+            <p style={{fontSize:10,color:"var(--txt3)"}}>{data.savingsGoals.length} goal{data.savingsGoals.length!==1?"s":""} · {fm(ps,totalTarget)} target</p>
+          </div>
+          <div style={{background:"var(--s1)",borderRadius:4,height:5,overflow:"hidden",marginTop:6}}><div style={{background:"linear-gradient(90deg,rgba(201,165,92,.6),var(--gold))",height:"100%",width:`${totalTarget>0?(totalSaved/totalTarget)*100:0}%`,borderRadius:4,transition:"width .5s"}}/></div>
+        </div>
+      )}
+
+      {/* Sweep Budget Surplus */}
+      {totalSurplus>0&&data.savingsGoals.length>0&&(
+        <div className="cd" style={{padding:"14px 18px",marginBottom:10,borderLeft:"3px solid #60a5fa"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div>
+              <p style={{fontSize:10,color:"var(--blu)",textTransform:"uppercase",fontWeight:700}}>Budget Surplus Available</p>
+              <p style={{fontSize:18,fontWeight:700,color:"var(--blu)"}}>{fm(ps,totalSurplus)}</p>
+            </div>
+            <button className="btn" onClick={sweepAll} style={{background:"#1a2540",color:"var(--blu)",padding:"8px 14px",borderRadius:8,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>{ic.sweep} Sweep to Goals</button>
+          </div>
+          <p style={{fontSize:9,color:"var(--txt3)",marginBottom:6}}>Unspent budget from {surplusByCat.length} categories. Sweeps to assigned goals (or first goal).</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {surplusByCat.map(s=>{
+              const goalName=s.goalId?data.savingsGoals.find(g=>g.id===s.goalId)?.name:null;
+              return <span key={s.cat} style={{fontSize:9,background:"var(--s1)",padding:"3px 8px",borderRadius:4,color:"var(--txt2)"}}>{s.cat}: {fm(ps,s.surplus)}{goalName?" -> "+goalName:""}</span>;
+            })}
+          </div>
+        </div>
+      )}
+
+      {showForm&&(
+        <div className="cd si" style={{padding:"14px 18px",marginBottom:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>{[{l:"Goal Name",p:"Emergency Fund",v:gf.name,k:"name",t:"text"},{l:`Target (${ps})`,p:"10000",v:gf.target,k:"target",t:"number"},{l:`Monthly (${ps})`,p:"500",v:gf.monthlyContrib,k:"monthlyContrib",t:"number"}].map(f=><div key={f.k}><label style={{fontSize:9,color:"var(--txt3)",textTransform:"uppercase"}}>{f.l}</label><input className="inp" type={f.t} value={f.v} onChange={e=>setGf(g=>({...g,[f.k]:e.target.value}))} placeholder={f.p} style={{fontSize:12,marginTop:2}}/></div>)}</div>
+          <div style={{display:"flex",gap:4}}><button className="btn bp" onClick={addGoal} style={{fontSize:11}}>Create</button><button className="btn bg" onClick={()=>setShowForm(false)}>Cancel</button></div>
+        </div>
+      )}
+
+      {data.savingsGoals.length===0&&!showForm?<div className="cd" style={{padding:"32px 20px",textAlign:"center"}}><div style={{fontSize:30,marginBottom:6}}>🎯</div><p style={{fontSize:13,fontWeight:600,marginBottom:3}}>No Goals Yet</p><p style={{fontSize:11,color:"var(--txt3)"}}>Create savings goals to track progress.</p></div>:(
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {data.savingsGoals.map(g=>{const pct=g.target>0?(g.current/g.target)*100:0;const rem=g.target-g.current;const mLeft=g.monthlyContrib>0?Math.ceil(rem/g.monthlyContrib):null;const proj=mLeft?new Date(Date.now()+mLeft*30*864e5):null;return(
+            <div key={g.id} className="cd si" style={{padding:"14px 18px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div><h3 style={{fontSize:14,fontWeight:600}}>{g.name}</h3><p style={{fontSize:10,color:"var(--txt3)"}}>{fm(ps,g.current)} of {fm(ps,g.target)}</p></div>
+                <span style={{fontSize:18,fontWeight:700,color:pct>=100?"#34d399":"#c9a55c"}}>{pct.toFixed(0)}%</span>
+              </div>
+              <div style={{background:"var(--s1)",borderRadius:4,height:6,overflow:"hidden",marginBottom:6}}><div style={{background:pct>=100?"linear-gradient(90deg,#22c55e,#4ade80)":"linear-gradient(90deg,#b08030,#d4a053)",height:"100%",width:`${Math.min(pct,100)}%`,borderRadius:4,transition:"width .5s"}}/></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:10,marginBottom:8}}>{[{l:"Remaining",v:fm(ps,rem)},{l:"Monthly",v:g.monthlyContrib>0?fm(ps,g.monthlyContrib):"—"},{l:"Projected",v:proj?proj.toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—"}].map(x=><div key={x.l}><span style={{color:"var(--txt3)"}}>{x.l}</span><div style={{fontWeight:600}}>{x.v}</div></div>)}</div>
+              <div style={{display:"flex",gap:4}}>{[25,100,500].map(a=><button key={a} className="btn" onClick={()=>contribute(g.id,a)} style={{flex:1,background:"#1a2e1a",color:"var(--grn)",padding:"5px 0",borderRadius:6,fontSize:10,fontWeight:700}}>+{ps}{a}</button>)}<button className="btn bd" onClick={()=>rmGoal(g.id)} style={{padding:"5px 8px"}}>{ic.trash}</button></div>
+            </div>
+          );})}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+
+</script>
+</body>
+</html>

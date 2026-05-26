@@ -1,0 +1,95 @@
+<h2>System Architecture — Option A</h2>
+<p class="subtitle">How all the pieces connect at cashflowtracker.net</p>
+
+<div style="max-width:860px;margin:0 auto">
+
+  <!-- Diagram -->
+  <div style="background:#0f172a;border-radius:14px;padding:2rem;font-family:'SF Mono',monospace;font-size:0.8rem;color:#e2e8f0;line-height:2">
+
+    <!-- User row -->
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:0.5rem 1rem;color:#94a3b8">👤 User (any device)</div>
+      <div style="color:#475569">──────────── HTTPS ────────────▶</div>
+      <div style="background:#0A6B4E22;border:1px solid #0A6B4E;border-radius:8px;padding:0.5rem 1rem;color:#4ade80">🌐 cashflowtracker.net<br><span style="font-size:0.7rem;color:#6b7280">Netlify CDN · React/Vite</span></div>
+    </div>
+
+    <!-- Three flows -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+
+      <!-- Auth flow -->
+      <div style="background:#1e1b4b;border:1px solid #4338ca;border-radius:10px;padding:1rem">
+        <div style="color:#818cf8;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">① LOGIN FLOW</div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;text-align:center">
+          <div style="background:#312e81;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#c7d2fe">React App</div>
+          <div style="color:#6366f1">↓ signInWithPopup()</div>
+          <div style="background:#312e81;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#c7d2fe">Firebase Auth</div>
+          <div style="color:#6366f1">↓ OAuth redirect</div>
+          <div style="background:#1a3a5c;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#93c5fd">Google Identity</div>
+          <div style="color:#6366f1">↓ JWT token</div>
+          <div style="background:#312e81;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#c7d2fe">App unlocked ✓</div>
+        </div>
+      </div>
+
+      <!-- Data flow -->
+      <div style="background:#0c1a10;border:1px solid #16a34a;border-radius:10px;padding:1rem">
+        <div style="color:#4ade80;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">② DATA FLOW</div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;text-align:center">
+          <div style="background:#14532d;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#86efac">React App</div>
+          <div style="color:#22c55e">↕ Firebase SDK</div>
+          <div style="background:#14532d;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#86efac">Firestore</div>
+          <div style="color:#22c55e;font-size:0.72rem">users/{uid}/data</div>
+          <div style="background:#14532d;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#86efac;font-size:0.72rem">Per-user isolation<br>Security rules enforced</div>
+          <div style="color:#22c55e;font-size:0.72rem">Real-time sync ✓</div>
+        </div>
+      </div>
+
+      <!-- AI flow -->
+      <div style="background:#1c1107;border:1px solid #b45309;border-radius:10px;padding:1rem">
+        <div style="color:#fbbf24;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem">③ AI PARSE FLOW</div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;text-align:center">
+          <div style="background:#451a03;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#fcd34d">React App</div>
+          <div style="color:#f59e0b;font-size:0.72rem">↓ POST /api/parse<br>+ user's API key in header</div>
+          <div style="background:#451a03;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#fcd34d">Netlify Function<br><span style="font-size:0.68rem">/netlify/functions/parse</span></div>
+          <div style="color:#f59e0b">↓ forwards key</div>
+          <div style="background:#1a0a00;border-radius:6px;padding:0.4rem 0.75rem;width:100%;color:#fed7aa">Anthropic API<br><span style="font-size:0.68rem">claude-haiku-4-5</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Key facts -->
+    <div style="margin-top:1.5rem;padding:1rem;background:#1e293b;border-radius:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.75rem">
+      <div><span style="color:#818cf8">🔑 Auth:</span> <span style="color:#cbd5e1">Firebase Google OAuth<br>JWT auto-refreshes</span></div>
+      <div><span style="color:#4ade80">🗄️ Data:</span> <span style="color:#cbd5e1">Firestore per-user doc<br>users/{uid}/appdata</span></div>
+      <div><span style="color:#fbbf24">🤖 AI key:</span> <span style="color:#cbd5e1">User pastes own key<br>Stored in Firestore (encrypted)</span></div>
+    </div>
+
+  </div>
+
+  <!-- What changes vs current -->
+  <div style="margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:1rem">
+      <div style="font-size:0.75rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem">❌ Removed</div>
+      <ul style="font-size:0.82rem;color:#7f1d1d;line-height:1.9;padding-left:1rem">
+        <li>localStorage as primary store</li>
+        <li>Vite proxy middleware (server/proxy.js)</li>
+        <li>.env API key on user's machine</li>
+        <li>Start CashFlow.bat launcher</li>
+        <li>Custom email/password auth</li>
+      </ul>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:1rem">
+      <div style="font-size:0.75rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem">✅ Added</div>
+      <ul style="font-size:0.82rem;color:#14532d;line-height:1.9;padding-left:1rem">
+        <li>Google Sign-In button</li>
+        <li>Firestore SDK (data layer)</li>
+        <li>Netlify Function /api/parse</li>
+        <li>Settings: paste Anthropic API key</li>
+        <li>Firestore security rules</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem;text-align:center">Does this architecture look right? Reply in terminal to continue to the next section.</p>

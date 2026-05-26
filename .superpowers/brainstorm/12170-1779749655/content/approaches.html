@@ -1,0 +1,83 @@
+<h2>Three Approaches to Hosting CashFlow</h2>
+<p class="subtitle">Pick the architecture that fits best — I'll recommend one after you look these over</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>BaaS-First — Firebase Everything ⭐ Recommended</h3>
+      <p>Firebase Auth handles Google login. Firestore stores user data directly from the browser. One Netlify Function handles the AI proxy. No backend server.</p>
+      <div style="margin-top:0.75rem;padding:0.75rem;background:#f0faf6;border-radius:8px;font-size:0.85rem">
+        <strong style="color:#0A6B4E">Browser → Firebase Auth → Google</strong><br>
+        <strong style="color:#0A6B4E">Browser → Firestore (user's data)</strong><br>
+        <strong style="color:#0A6B4E">Browser → Netlify Function → Anthropic API</strong>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Least code to write</li>
+          <li>Real-time sync built in</li>
+          <li>Scales automatically</li>
+          <li>Free tier generous (1GB storage, 50k reads/day)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Firestore security rules must be written carefully</li>
+          <li>Firebase vendor lock-in</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Firebase Auth + Netlify Functions Backend</h3>
+      <p>Firebase Auth for login only. All data reads/writes go through Netlify Functions (your own mini-API). Functions talk to Firestore server-side. More control, more code.</p>
+      <div style="margin-top:0.75rem;padding:0.75rem;background:#f5f5f0;border-radius:8px;font-size:0.85rem">
+        <strong style="color:#555">Browser → Firebase Auth → Google</strong><br>
+        <strong style="color:#555">Browser → Netlify Function (CRUD) → Firestore</strong><br>
+        <strong style="color:#555">Browser → Netlify Function (AI) → Anthropic</strong>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>All business logic server-side</li>
+          <li>No Firestore security rules needed</li>
+          <li>Easier to add rate limiting</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Many more functions to write and maintain</li>
+          <li>More latency (extra hop)</li>
+          <li>No real-time sync</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Offline-First Hybrid (localStorage + Firestore sync)</h3>
+      <p>Keep localStorage as the primary store. Add Firestore as a cloud sync layer — changes push up when online. Works offline, syncs when connected.</p>
+      <div style="margin-top:0.75rem;padding:0.75rem;background:#f5f5f0;border-radius:8px;font-size:0.85rem">
+        <strong style="color:#555">Browser → localStorage (immediate)</strong><br>
+        <strong style="color:#555">Background sync → Firestore</strong><br>
+        <strong style="color:#555">Browser → Netlify Function → Anthropic</strong>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Works offline</li>
+          <li>Instant UI (no latency)</li>
+          <li>Preserves existing data model</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Conflict resolution is hard</li>
+          <li>Most complex to build</li>
+          <li>Cross-device sync can get out of sync</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">Click to select your preferred approach, or just reply in the terminal</p>

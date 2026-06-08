@@ -9,3 +9,6 @@ dist/
 coverage/
 tests/e2e/screenshots/
 tests/e2e/videos/
+
+# Local Netlify folder
+.netlify

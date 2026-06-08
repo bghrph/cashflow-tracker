@@ -601,3 +601,97 @@
 }
 .source-badge.local { background: var(--accent-2-soft); color: var(--accent-2); }
 .source-badge.ai { background: var(--ai-soft); color: var(--ai); }
+
+/* Tutorial overlay --------------------------------------------- */
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 300;
+  animation: fade-in 0.2s ease both;
+}
+.tutorial-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
+  animation: fade-up 0.25s ease both;
+}
+.tutorial-dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+.tutorial-heading {
+  font-family: 'Fraunces', serif;
+  font-variation-settings: 'opsz' 60, 'wght' 600;
+  font-size: 24px;
+  margin: 0 0 16px;
+  padding-right: 36px;
+}
+.tutorial-video {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  background: #000;
+}
+.tutorial-video-fallback {
+  margin: 0;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px;
+  text-align: center;
+}
+.tutorial-steps {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.tutorial-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+}
+.tutorial-step-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+}
+.tutorial-step-body {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+}
+.tutorial-skip-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.tutorial-skip-link:hover { color: var(--ink-2); }

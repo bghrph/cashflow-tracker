@@ -3,6 +3,7 @@ import Sidebar from './Sidebar.jsx';
 import BottomNav from './BottomNav.jsx';
 import NotificationsPanel from './NotificationsPanel.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import { IconHelp } from './icons.jsx';
 
 const TAB_TITLES = {
   overview: 'Overview',
@@ -11,7 +12,7 @@ const TAB_TITLES = {
   setup: 'Setup',
 };
 
-export default function Shell({ auth, data, tab, setTab, notifications, onLogout, children }) {
+export default function Shell({ auth, data, tab, setTab, notifications, onLogout, onOpenTutorial, children }) {
   return (
     <div className="app-shell">
       <Sidebar tab={tab} setTab={setTab} auth={auth} currency={data.primaryCurrency} onLogout={onLogout} />
@@ -20,6 +21,9 @@ export default function Shell({ auth, data, tab, setTab, notifications, onLogout
           <div className="app-header-title">{TAB_TITLES[tab]}</div>
           <div className="header-actions">
             <ThemeToggle />
+            <button className="btn ghost icon" onClick={onOpenTutorial} aria-label="Open tutorial">
+              <IconHelp />
+            </button>
             <NotificationsPanel notifications={notifications} />
           </div>
         </header>

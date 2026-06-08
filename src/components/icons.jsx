@@ -182,6 +182,14 @@ export const IconMoon = (p) => (
   </Svg>
 );
 
+export const IconHelp = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.5 9a2.5 2.5 0 0 1 4.6-1.35c.4.6.4 1.4 0 2-.4.6-1.1.85-1.6 1.2-.5.35-.5.85-.5 1.15" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </Svg>
+);
+
 export const IconWallet = (p) => (
   <Svg size={p.size || 18}>
     <line x1="12" y1="1" x2="12" y2="23" />

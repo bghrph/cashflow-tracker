@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { ThemeProvider } from './lib/theme.jsx';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth as firebaseAuth } from './lib/firebase.js';
@@ -12,6 +12,7 @@ import SetupTab from './tabs/SetupTab.jsx';
 import TransactionsTab from './tabs/TransactionsTab.jsx';
 import OverviewTab from './tabs/OverviewTab.jsx';
 import GoalsTab from './tabs/GoalsTab.jsx';
+import TutorialOverlay from './components/TutorialOverlay.jsx';
 import { pad, monthRange, dateString } from './lib/dates.js';
 
 export default function App() {
@@ -22,39 +23,51 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState(null);
   const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [profile, setProfile] = useState(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const authGenerationRef = useRef(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+      const myGeneration = ++authGenerationRef.current;
+
       if (!firebaseUser) {
         setAuth(null);
         setUid(null);
         setAnthropicApiKey('');
         setData(null);
+        setProfile(null);
+        setTutorialOpen(false);
         setLoading(false);
         return;
       }
 
       try {
-        const profile = await loadProfile(firebaseUser.uid);
+        let loadedProfile = await loadProfile(firebaseUser.uid);
         const userAuth = {
           name: firebaseUser.displayName || firebaseUser.email,
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL || null,
         };
 
-        if (!profile) {
+        if (!loadedProfile) {
           // First login — create profile
-          await saveProfile(firebaseUser.uid, {
+          loadedProfile = {
             email: firebaseUser.email,
             displayName: firebaseUser.displayName || firebaseUser.email,
             photoURL: firebaseUser.photoURL || null,
             createdAt: new Date().toISOString(),
-          });
+          };
+          await saveProfile(firebaseUser.uid, loadedProfile);
         }
 
         setAuth(userAuth);
         setUid(firebaseUser.uid);
-        setAnthropicApiKey(profile?.anthropicApiKey || '');
+        setAnthropicApiKey(loadedProfile?.anthropicApiKey || '');
+        if (authGenerationRef.current === myGeneration) {
+          setProfile(loadedProfile);
+          setTutorialOpen(loadedProfile?.hasSeenTutorial !== true);
+        }
 
         // Check for existing Firestore data
         const firestoreData = await loadFirestoreData(firebaseUser.uid);
@@ -141,6 +154,18 @@ export default function App() {
     // onAuthStateChanged(null) handles auth/data teardown
   }, []);
 
+  const isFirstRun = !profile?.hasSeenTutorial;
+
+  const handleCompleteTutorial = useCallback(async () => {
+    setTutorialOpen(false);
+    setProfile((prev) => (prev ? { ...prev, hasSeenTutorial: true } : prev));
+    try {
+      if (uid) await saveProfile(uid, { hasSeenTutorial: true });
+    } catch (err) {
+      console.error('Failed to persist tutorial completion:', err);
+    }
+  }, [uid]);
+
   const incomeCategories = useMemo(
     () => (data ? flattenCategories(data.incomeGroups) : []),
     [data?.incomeGroups]
@@ -175,16 +200,24 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <Shell auth={auth} data={data} tab={tab} setTab={setTab} notifications={notifications} onLogout={logout}>
-        {tab === 'setup' && <SetupTab data={data} update={update} uid={uid} apiKey={anthropicApiKey} onApiKeyChange={setAnthropicApiKey} />}
-        {tab === 'transactions' && (
-          <TransactionsTab data={data} update={update} incomeCategories={incomeCategories} expenseCategories={expenseCategories} apiKey={anthropicApiKey} />
-        )}
-        {tab === 'overview' && (
-          <OverviewTab data={data} incomeCategories={incomeCategories} expenseCategories={expenseCategories} />
-        )}
-        {tab === 'goals' && <GoalsTab data={data} update={update} />}
-      </Shell>
+      <div className="app-background" {...(tutorialOpen ? { inert: '' } : {})} aria-hidden={tutorialOpen || undefined}>
+        <Shell auth={auth} data={data} tab={tab} setTab={setTab} notifications={notifications} onLogout={logout} onOpenTutorial={() => setTutorialOpen(true)}>
+          {tab === 'setup' && <SetupTab data={data} update={update} uid={uid} apiKey={anthropicApiKey} onApiKeyChange={setAnthropicApiKey} />}
+          {tab === 'transactions' && (
+            <TransactionsTab data={data} update={update} incomeCategories={incomeCategories} expenseCategories={expenseCategories} apiKey={anthropicApiKey} />
+          )}
+          {tab === 'overview' && (
+            <OverviewTab data={data} incomeCategories={incomeCategories} expenseCategories={expenseCategories} />
+          )}
+          {tab === 'goals' && <GoalsTab data={data} update={update} />}
+        </Shell>
+      </div>
+      <TutorialOverlay
+        open={tutorialOpen}
+        isFirstRun={isFirstRun}
+        onComplete={handleCompleteTutorial}
+        onClose={() => setTutorialOpen(false)}
+      />
     </ThemeProvider>
   );
 }

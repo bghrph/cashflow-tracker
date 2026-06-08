@@ -1,3 +1,5 @@
+import '@testing-library/jest-dom/vitest';
+
 // Vitest global setup — runs before each test file in Node workers.
 // Node 25 ships a native localStorage that requires --localstorage-file to work.
 // Replace it with a simple in-memory implementation so tests work without flags.

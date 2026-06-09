@@ -25,7 +25,19 @@ vi.mock('firebase/auth', () => ({
   signOut: vi.fn(async () => {}),
 }));
 
-vi.mock('../lib/firebase.js', () => ({ auth: {} }));
+vi.mock('../lib/firebase.js', () => ({ auth: {}, db: {} }));
+
+vi.mock('../lib/dataSync.js', () => ({
+  startDataSync: vi.fn(),
+  stopDataSync: vi.fn(),
+  subscribeDataSync: vi.fn((fn) => {
+    fn({ saveStatus: 'idle', remoteChange: false });
+    return () => {};
+  }),
+  dismissRemoteChangeNotice: vi.fn(),
+  markSavePending: vi.fn(),
+  markSaveFailed: vi.fn(),
+}));
 
 vi.mock('../lib/firestore.js', () => ({
   loadProfile: vi.fn(async () => ({ hasSeenTutorial: true })),

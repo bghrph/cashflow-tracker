@@ -52,7 +52,7 @@ describe('firestore data layer', () => {
     await saveData('uid1', { transactions: [] });
     expect(setDoc).toHaveBeenCalledWith(
       expect.anything(),
-      { transactions: [], updatedAt: 'SERVER_TIMESTAMP' }
+      { transactions: [], updatedAt: 'SERVER_TIMESTAMP', lastWriterId: expect.any(String) }
     );
   });
 

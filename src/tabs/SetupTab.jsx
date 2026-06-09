@@ -5,6 +5,8 @@ import CategoryGroup from '../components/CategoryGroup.jsx';
 import SettingsPanel from '../components/SettingsPanel.jsx';
 import { IconPlus, IconRepeat, IconTrash } from '../components/icons.jsx';
 import { saveProfile } from '../lib/firestore.js';
+import { isLocalPersistenceEnabled, setLocalPersistencePreference } from '../lib/persistencePreference.js';
+import { awaitPendingWrites, clearLocalCache } from '../lib/cacheLifecycle.js';
 
 export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) {
   const [newIncomeGroup, setNewIncomeGroup] = useState('');
@@ -13,6 +15,10 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
   const [keySaving, setKeySaving] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
   const [keyError, setKeyError] = useState('');
+  const [persistenceEnabled] = useState(isLocalPersistenceEnabled);
+  const [persistenceConfirm, setPersistenceConfirm] = useState(null); // null | { next: boolean }
+  const [persistenceWorking, setPersistenceWorking] = useState(false);
+  const [persistenceError, setPersistenceError] = useState('');
   const allExpense = flattenCategories(data.expenseGroups);
   const [selectedCat, setSelectedCat] = useState(allExpense[0] || '');
   const bt = data.budgetTargets[selectedCat] || {
@@ -51,6 +57,35 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
   useEffect(() => {
     setKeyInput(apiKey || '');
   }, [apiKey]);
+
+  // Flipping the local-persistence preference can't change the already-running
+  // Firestore client (cache settings are immutable post-init) — it requires the
+  // same terminate→clear→persist→reload sequence sign-out uses for its cache clear.
+  const confirmPersistenceChange = async () => {
+    if (!persistenceConfirm) return;
+    const { next } = persistenceConfirm;
+    setPersistenceWorking(true);
+    setPersistenceError('');
+    try {
+      const pending = await awaitPendingWrites();
+      if (!pending.synced && pending.discardsPendingWrites) {
+        setPersistenceError('You have unsynced changes and no connection — reconnect before switching local storage, or you may lose them.');
+        setPersistenceWorking(false);
+        return;
+      }
+      const cleared = await clearLocalCache();
+      setLocalPersistencePreference(next);
+      if (!cleared.cleared) {
+        // Best-effort: another open tab/installed-app context still holds the
+        // cache. The preference is saved either way; reload picks it up fresh.
+        console.warn('Local cache clear skipped (another context has it open) — preference saved, reloading.');
+      }
+      window.location.reload();
+    } catch (err) {
+      setPersistenceError(err?.message || 'Failed to switch local storage. Try again.');
+      setPersistenceWorking(false);
+    }
+  };
 
   const addGroup = (type) => {
     const v = (type === 'income' ? newIncomeGroup : newExpenseGroup).trim();
@@ -303,6 +338,49 @@ export default function SetupTab({ data, update, uid, apiKey, onApiKeyChange }) 
           <p style={{ fontSize: 11, color: 'var(--negative)', marginTop: 6 }}>
             Key should start with <code>sk-ant-</code>
           </p>
+        )}
+      </div>
+
+      <div className="card" style={{ borderLeft: '3px solid var(--info)', marginBottom: 16 }}>
+        <span className="eyebrow info">Data & Storage</span>
+        <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, marginBottom: 12, lineHeight: 1.6 }}>
+          When on, CashFlow caches your financial data and Anthropic API key on this device so the app loads instantly and works offline. Changing this clears the local cache and reloads the app — it takes effect on next load.
+        </p>
+        {!persistenceConfirm ? (
+          <div className="row space" style={{ alignItems: 'center' }}>
+            <span style={{ fontSize: 13 }}>
+              Local offline storage: <strong>{persistenceEnabled ? 'On' : 'Off'}</strong>
+            </span>
+            <button
+              type="button"
+              className="btn outline sm"
+              onClick={() => setPersistenceConfirm({ next: !persistenceEnabled })}
+            >
+              Turn {persistenceEnabled ? 'off' : 'on'}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--ink)', marginBottom: 10 }}>
+              Turn local offline storage <strong>{persistenceConfirm.next ? 'on' : 'off'}</strong>? CashFlow will clear its local cache and reload.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn primary sm" onClick={confirmPersistenceChange} disabled={persistenceWorking}>
+                {persistenceWorking ? 'Working…' : 'Continue & reload'}
+              </button>
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => { setPersistenceConfirm(null); setPersistenceError(''); }}
+                disabled={persistenceWorking}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {persistenceError && (
+          <p style={{ fontSize: 11, color: 'var(--negative)', marginTop: 8 }}>{persistenceError}</p>
         )}
       </div>
 

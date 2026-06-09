@@ -2,7 +2,7 @@ import React from 'react';
 import { IconLogout } from './icons.jsx';
 import { NAV_ITEMS } from './navConfig.js';
 
-export default function Sidebar({ tab, setTab, auth, currency, onLogout }) {
+export default function Sidebar({ tab, setTab, auth, currency, onLogout, signingOut }) {
   const initials = (auth?.name || auth?.email || '?')
     .split(/\s+/)
     .map((s) => s[0])
@@ -41,7 +41,13 @@ export default function Sidebar({ tab, setTab, auth, currency, onLogout }) {
         <div style={{ flex: 1, overflow: 'hidden' }} className="text-ellipsis">
           {auth?.name || auth?.email}
         </div>
-        <button className="btn ghost icon xs" onClick={onLogout} title="Log out" aria-label="Log out">
+        <button
+          className="btn ghost icon xs"
+          onClick={onLogout}
+          disabled={signingOut}
+          title={signingOut ? 'Signing out…' : 'Log out'}
+          aria-label={signingOut ? 'Signing out' : 'Log out'}
+        >
           <IconLogout size={14} />
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase.js';
+import { RUNTIME_ID } from './runtimeId.js';
 
 export async function loadProfile(uid) {
   const snap = await getDoc(doc(db, 'users', uid));
@@ -19,6 +20,10 @@ export async function saveData(uid, data) {
   await setDoc(doc(db, 'users', uid, 'appdata', 'main'), {
     ...data,
     updatedAt: serverTimestamp(),
+    // Tags this write with the originating tab/runtime so the live listener
+    // (see dataSync.js) can tell "server-acked my own write" apart from
+    // "someone else changed this" — both bump updatedAt identically.
+    lastWriterId: RUNTIME_ID,
   });
 }
 

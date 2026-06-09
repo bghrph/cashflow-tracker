@@ -51,9 +51,12 @@ export async function aiParse(text, data, apiKey) {
 
   const json = await response.json();
   // The Netlify function returns { content: '<raw JSON string>' }; parse it.
+  // Strip optional markdown code fences (```json ... ```) before parsing.
   let parsed;
   try {
-    parsed = typeof json.content === 'string' ? JSON.parse(json.content) : json;
+    let raw = typeof json.content === 'string' ? json.content : JSON.stringify(json);
+    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    parsed = JSON.parse(raw);
   } catch {
     throw new AIParserError('Invalid response from AI service', 500);
   }

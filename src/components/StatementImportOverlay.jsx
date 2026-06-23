@@ -148,6 +148,7 @@ export default function StatementImportOverlay({ open, data, apiKey, onConfirm, 
     onConfirm(results);
     let mem = memory;
     selected.forEach((r) => { mem = remember(mem, r.description, r.category); });
+    setMemory(mem);
     if (update) update((p) => ({ ...p, merchantMemory: mem }));
     setSummary({
       count: selected.length,
@@ -191,7 +192,7 @@ export default function StatementImportOverlay({ open, data, apiKey, onConfirm, 
           </div>
         ) : (
           <>
-            <span className="eyebrow accent">Step {stepNum} of 3</span>
+            {step !== 'done' && <span className="eyebrow accent">Step {stepNum} of 3</span>}
             <h2 style={{ marginTop: 4, marginBottom: 12 }}>Import a statement</h2>
 
             {error && (

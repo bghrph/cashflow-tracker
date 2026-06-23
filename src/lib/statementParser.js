@@ -6,11 +6,13 @@ export function stripBom(text) {
 }
 
 export function detectDelimiter(line) {
-  const counts = {
-    ',': (line.match(/,/g) || []).length,
-    '\t': (line.match(/\t/g) || []).length,
-    ';': (line.match(/;/g) || []).length,
-  };
+  let inQ = false;
+  const counts = { ',': 0, '\t': 0, ';': 0 };
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') inQ = !inQ;
+    else if (!inQ && (ch === ',' || ch === '\t' || ch === ';')) counts[ch]++;
+  }
   let best = ',', max = counts[','];
   for (const d of ['\t', ';']) if (counts[d] > max) { max = counts[d]; best = d; }
   return max > 0 ? best : ',';
@@ -37,10 +39,12 @@ export function normalizeAmount(raw) {
   let s = String(raw).trim();
   if (!s) return null;
   let neg = false;
+  s = s.replace(/^\$/, '').trim();
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
   if (s.includes('-')) neg = true;
   s = s.replace(/[^0-9.]/g, '');
   if (s === '' || s === '.') return null;
+  if ((s.match(/\./g) || []).length > 1) return null;
   const n = parseFloat(s);
   if (!isFinite(n)) return null;
   return neg ? -n : n;

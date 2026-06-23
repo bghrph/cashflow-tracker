@@ -8,6 +8,8 @@ describe('normalizeAmount', () => {
   it('parentheses mean negative', () => expect(normalizeAmount('(45.00)')).toBe(-45));
   it('leading minus is negative', () => expect(normalizeAmount('-45.00')).toBe(-45));
   it('blank is null', () => expect(normalizeAmount('')).toBe(null));
+  it('dollar outside parens is negative', () => expect(normalizeAmount('$(45.00)')).toBe(-45));
+  it('rejects malformed multi-dot amounts', () => expect(normalizeAmount('1.2.3')).toBe(null));
 });
 
 describe('normalizeDate', () => {
@@ -29,6 +31,7 @@ describe('detectDelimiter', () => {
   it('detects tab', () => expect(detectDelimiter('a\tb\tc')).toBe('\t'));
   it('detects semicolon', () => expect(detectDelimiter('a;b;c')).toBe(';'));
   it('defaults to comma', () => expect(detectDelimiter('a,b,c')).toBe(','));
+  it('ignores delimiters inside quoted fields', () => expect(detectDelimiter('"a,b,c"\t"d,e"')).toBe('\t'));
 });
 
 describe('parseStatement', () => {

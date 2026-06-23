@@ -69,9 +69,13 @@ export function normalizeDate(raw) {
 }
 
 const RE = {
-  date: /date|posted|trans/i,
-  desc: /desc|name|memo|payee|detail|narrative|transaction/i,
-  amount: /^amount$|amt|^value$/i,
+  date: /date|posted/i,
+  // Prefer specific description headers; only fall back to greedy ones
+  // (detail/transaction) if no specific match exists, so a Chase "Details"
+  // debit/credit column never steals the real "Description" column.
+  descPrimary: /descript|payee|narrative|memo|\bname\b/i,
+  descFallback: /detail|transaction|reference/i,
+  amount: /^\s*amount\s*$|amt|^\s*value\s*$/i,
   debit: /debit|withdrawal|charge/i,
   credit: /credit|deposit|payment/i,
 };
@@ -82,7 +86,9 @@ export function mapColumns(header) {
   const amount = find(RE.amount);
   const debit = find(RE.debit);
   const credit = find(RE.credit);
-  const description = find(RE.desc, [date].filter((i) => i >= 0));
+  const used = [date, amount, debit, credit].filter((i) => i >= 0);
+  let description = find(RE.descPrimary, [date].filter((i) => i >= 0));
+  if (description < 0) description = find(RE.descFallback, used);
   return { date, description, amount, debit, credit };
 }
 

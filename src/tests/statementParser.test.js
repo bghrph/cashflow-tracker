@@ -67,6 +67,14 @@ describe('parseStatement', () => {
     ]);
   });
 
+  it('picks the real Description column, not a Chase "Details" debit/credit column', () => {
+    const csv =
+      'Details,Posting Date,Description,Amount,Type,Balance\nDEBIT,03/07/2026,"AMAZON, INC",-45.00,ACH_DEBIT,100.00';
+    const r = parseStatement(csv);
+    expect(r.ok).toBe(true);
+    expect(r.rows[0]).toEqual({ date: '2026-03-07', description: 'AMAZON, INC', amount: 45, type: 'Expense' });
+  });
+
   it('handles a headerless file positionally', () => {
     const csv = '03/07/2026,Coffee Shop,-5.00\n03/08/2026,Grocery Mart,-60.00';
     const r = parseStatement(csv);

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { ThemeProvider } from './lib/theme.jsx';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth as firebaseAuth } from './lib/firebase.js';
+import { completeRedirectSignIn } from './lib/authFlow.js';
 import { loadProfile, saveProfile, loadData as loadFirestoreData, saveData as saveFirestoreData, loadLegacyData, clearLegacyData } from './lib/firestore.js';
 import { awaitPendingWrites, unfreezeMutations, areMutationsFrozen, clearLocalCache } from './lib/cacheLifecycle.js';
 import { startDataSync, stopDataSync, markSavePending, markSaveFailed } from './lib/dataSync.js';
@@ -32,6 +33,7 @@ export default function App() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [loadError, setLoadError] = useState(null); // null | 'offline-no-cache' | 'unknown'
+  const [redirectError, setRedirectError] = useState(''); // error from a failed redirect sign-in leg
   const authGenerationRef = useRef(0);
   const currentFirebaseUserRef = useRef(null);
 
@@ -113,6 +115,16 @@ export default function App() {
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   }, [loadError, retryLoad]);
+
+  // Complete any pending redirect sign-in (installed PWA / in-app webview path).
+  // onAuthStateChanged delivers the returned user on success; getRedirectResult
+  // is the only place a redirect-leg *error* surfaces, so we catch it here and
+  // show it on the Auth screen instead of silently dropping back to login.
+  useEffect(() => {
+    completeRedirectSignIn().catch((err) => {
+      setRedirectError(err?.message || 'Sign-in failed. Please try again.');
+    });
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
@@ -268,7 +280,7 @@ export default function App() {
   if (!auth) {
     return (
       <ThemeProvider>
-        <Auth />
+        <Auth initialError={redirectError} />
         <UpdateToast />
       </ThemeProvider>
     );

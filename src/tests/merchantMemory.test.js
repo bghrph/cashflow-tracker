@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { normalizeMerchant, lookup, remember } from '../lib/merchantMemory.js';
 
 describe('normalizeMerchant', () => {
-  it('collapses Amazon variants to one key', () => {
-    const a = normalizeMerchant('AMAZON.COM');
-    expect(normalizeMerchant('AMZN*PRIME')).not.toBe(a); // different first chars stay distinct
-    expect(normalizeMerchant('Amazon Mktp US')).toBe(normalizeMerchant('AMAZON MKTP US'));
+  it('keeps genuinely different merchants distinct', () => {
+    expect(normalizeMerchant('AMZN*PRIME')).not.toBe(normalizeMerchant('AMAZON.COM'));
   });
-  it('uppercases and strips punctuation/spaces', () => {
+  it('collapses a merchant across different trailing store/transaction numbers', () => {
+    expect(normalizeMerchant('Amazon Mktp US 2')).toBe(normalizeMerchant('AMAZON MKTP US 5'));
+    expect(normalizeMerchant('STARBUCKS #123')).toBe(normalizeMerchant('STARBUCKS #999'));
+  });
+  it('uppercases and strips punctuation, spaces, and trailing numbers', () => {
     expect(normalizeMerchant('Star-bucks #123')).toBe('STARBUCKS');
   });
   it('caps at 25 chars', () => {

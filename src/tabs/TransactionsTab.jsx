@@ -16,6 +16,8 @@ import {
   IconX,
 } from '../components/icons.jsx';
 
+const StatementImportOverlay = React.lazy(() => import('../components/StatementImportOverlay.jsx'));
+
 export default function TransactionsTab({ data, update, incomeCategories, expenseCategories, apiKey }) {
   const now = new Date();
   const [form, setForm] = useState({
@@ -38,6 +40,7 @@ export default function TransactionsTab({ data, update, incomeCategories, expens
     amount: '',
     description: '',
   });
+  const [importOpen, setImportOpen] = useState(false);
 
   const cats = form.type === 'Income' ? incomeCategories : expenseCategories;
   const groups = form.type === 'Income' ? data.incomeGroups : data.expenseGroups;
@@ -231,6 +234,9 @@ export default function TransactionsTab({ data, update, incomeCategories, expens
       <div className="row space" style={{ marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <h2>Transactions</h2>
         <div className="row" style={{ gap: 6 }}>
+          <button className="btn ghost sm" onClick={() => setImportOpen(true)}>
+            <IconPlus /> Import
+          </button>
           <button className="btn ghost sm" onClick={exportCSV}>
             <IconDownload /> CSV
           </button>
@@ -701,6 +707,18 @@ export default function TransactionsTab({ data, update, incomeCategories, expens
             </p>
           )}
         </div>
+      )}
+      {importOpen && (
+        <React.Suspense fallback={null}>
+          <StatementImportOverlay
+            open={importOpen}
+            data={data}
+            apiKey={apiKey}
+            onConfirm={onConfirmSmart}
+            update={update}
+            onClose={() => setImportOpen(false)}
+          />
+        </React.Suspense>
       )}
     </div>
   );

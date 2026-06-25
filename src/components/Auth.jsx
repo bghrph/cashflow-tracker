@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../lib/firebase.js';
+import { signInWithGoogle } from '../lib/authFlow.js';
 import { IconGoogle, IconWallet } from './icons.jsx';
 
-export default function Auth() {
+export default function Auth({ initialError = '' }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Seed with any error from a failed redirect leg (surfaced by App.jsx).
+  const [error, setError] = useState(initialError);
 
   const handleGoogle = async () => {
     setError('');
     setLoading(true);
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      // onAuthStateChanged in App.jsx will handle the rest
+      await signInWithGoogle();
+      // Popup path: onAuthStateChanged in App.jsx takes over from here.
+      // Redirect path: the call above navigates away, so nothing below runs —
+      // we intentionally leave `loading` true until the page unloads.
     } catch (err) {
-      setError(err.message || 'Sign-in failed. Please try again.');
-    } finally {
+      setError(err?.message || 'Sign-in failed. Please try again.');
       setLoading(false);
     }
   };

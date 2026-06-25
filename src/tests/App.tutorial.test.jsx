@@ -23,6 +23,8 @@ vi.mock('firebase/auth', () => ({
     return () => {};
   }),
   signOut: vi.fn(async () => {}),
+  // App.jsx completes any pending redirect sign-in on mount (PWA sign-in gate).
+  getRedirectResult: vi.fn(async () => null),
 }));
 
 vi.mock('../lib/firebase.js', () => ({ auth: {}, db: {} }));

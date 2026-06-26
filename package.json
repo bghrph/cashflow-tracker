@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "start-server-and-test dev http://localhost:5173 \"testcafe chrome:headless\"",
     "test:e2e:live": "start-server-and-test dev http://localhost:5173 \"testcafe chrome --live\"",
     "test:all": "npm run test && npm run test:e2e"
@@ -29,6 +30,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.8",
     "dotenv": "^16.4.7",
     "jsdom": "^25.0.1",
     "netlify-cli": "^26.0.2",

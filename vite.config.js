@@ -52,5 +52,11 @@ export default defineConfig({
     // Unit tests only — TestCafe e2e tests live in tests/e2e and run via `npm run test:e2e`
     include: ['src/tests/**/*.test.{js,jsx}'],
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**', 'legacy/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/tests/**', 'src/main.jsx'],
+    },
   },
 });

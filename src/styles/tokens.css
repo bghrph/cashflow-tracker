@@ -1,123 +1,124 @@
 /* ─────────────────────────────────────────────────────────
-   QUIET WEALTH — Design Tokens
+   PRIVATE LEDGER — Design Tokens
    Light is the default; dark is opt-in via [data-theme="dark"].
    ───────────────────────────────────────────────────────── */
 
 :root,
 :root[data-theme='light'] {
-  /* Surface */
-  --bg: #FAFAF7;
+  /* Surface — archive paper, edges are structure */
+  --bg: #F5F3EF;
   --bg-elev: #FFFFFF;
-  --surface: #F4F2EC;
-  --surface-2: #EDEAE1;
-  --border: #E6E2D8;
-  --border-strong: #D6D1C2;
+  --surface: #ECEAE4;
+  --surface-2: #E0DDD8;
+  --border: #C5C2BA;
+  --border-strong: #A09D95;
 
   /* Text */
-  --ink: #1A1A1A;
-  --ink-2: #4A4A4A;
-  --ink-3: #8A857C;
-  --ink-on-accent: #FAFAF7;
+  --ink: #18181B;
+  --ink-2: #52525B;
+  --ink-3: #A1A1AA;
+  --ink-on-accent: #FFFFFF;
 
-  /* Brand */
-  --accent: #0A6B4E;
-  --accent-hover: #0F8463;
-  --accent-soft: #E5F0EC;
-  --accent-2: #B7791F;
-  --accent-2-soft: #FBEFD8;
+  /* Brand — institutional cobalt, not botanical */
+  --accent: #1E3A8A;
+  --accent-hover: #1E40AF;
+  --accent-soft: #EFF6FF;
+  --accent-2: #92400E;
+  --accent-2-soft: #FEF3C7;
 
-  /* Status */
-  --positive: #0A6B4E;
-  --positive-soft: #E5F0EC;
-  --negative: #B91C1C;
-  --negative-soft: #FAEAEA;
-  --warning: #B7791F;
-  --warning-soft: #FBEFD8;
-  --info: #1E40AF;
-  --info-soft: #E5EBF8;
-  --ai: #6D28D9;
-  --ai-soft: #EFE5FB;
+  /* Status — semantic colours remain universal */
+  --positive: #166534;
+  --positive-soft: #DCFCE7;
+  --negative: #991B1B;
+  --negative-soft: #FEE2E2;
+  --warning: #92400E;
+  --warning-soft: #FEF3C7;
+  --info: #1E3A8A;
+  --info-soft: #EFF6FF;
+  --ai: #5B21B6;
+  --ai-soft: #EDE9FE;
 
-  /* Effects */
-  --shadow-sm: 0 1px 2px rgba(20, 20, 20, 0.04);
-  --shadow-md: 0 1px 2px rgba(20, 20, 20, 0.04), 0 4px 12px rgba(20, 20, 20, 0.05);
-  --shadow-lg: 0 1px 2px rgba(20, 20, 20, 0.04), 0 12px 32px rgba(20, 20, 20, 0.08);
-  --shadow-pop: 0 12px 40px rgba(10, 107, 78, 0.18);
+  /* Effects — flat; borders carry weight, not shadows */
+  --shadow-sm: 0 0 0 1px var(--border);
+  --shadow-md: 0 0 0 1px var(--border), 0 2px 8px rgba(24, 24, 27, 0.06);
+  --shadow-lg: 0 0 0 1px var(--border), 0 8px 24px rgba(24, 24, 27, 0.10);
+  --shadow-pop: 0 6px 24px rgba(30, 58, 138, 0.18);
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  /* Precision radii — nearly flat, like a financial instrument */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 5px;
+  --radius-xl: 8px;
   --radius-pill: 999px;
 
-  --ring: 0 0 0 4px rgba(10, 107, 78, 0.18);
+  --ring: 0 0 0 3px rgba(30, 58, 138, 0.18);
 }
 
 :root[data-theme='dark'] {
-  --bg: #0E0E10;
-  --bg-elev: #16161A;
-  --surface: #1F1F24;
-  --surface-2: #25252B;
-  --border: #2A2A30;
-  --border-strong: #3A3A42;
+  --bg: #0C0C0E;
+  --bg-elev: #141416;
+  --surface: #1C1C20;
+  --surface-2: #232328;
+  --border: #2E2E36;
+  --border-strong: #44444E;
 
-  --ink: #F0EDE6;
-  --ink-2: #A8A39A;
-  --ink-3: #6A655E;
-  --ink-on-accent: #0E0E10;
+  --ink: #F4F4F5;
+  --ink-2: #A1A1AA;
+  --ink-3: #71717A;
+  --ink-on-accent: #0C0C0E;
 
-  --accent: #34D399;
-  --accent-hover: #6EE7B7;
-  --accent-soft: rgba(52, 211, 153, 0.12);
-  --accent-2: #D4A24A;
-  --accent-2-soft: rgba(212, 162, 74, 0.14);
+  --accent: #3B82F6;
+  --accent-hover: #60A5FA;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-2: #FBBF24;
+  --accent-2-soft: rgba(251, 191, 36, 0.12);
 
-  --positive: #34D399;
-  --positive-soft: rgba(52, 211, 153, 0.12);
+  --positive: #4ADE80;
+  --positive-soft: rgba(74, 222, 128, 0.12);
   --negative: #F87171;
   --negative-soft: rgba(248, 113, 113, 0.12);
-  --warning: #D4A24A;
-  --warning-soft: rgba(212, 162, 74, 0.14);
-  --info: #60A5FA;
-  --info-soft: rgba(96, 165, 250, 0.14);
-  --ai: #A78BFA;
-  --ai-soft: rgba(167, 139, 250, 0.14);
+  --warning: #FBBF24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --info: #3B82F6;
+  --info-soft: rgba(59, 130, 246, 0.12);
+  --ai: #C084FC;
+  --ai-soft: rgba(192, 132, 252, 0.12);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 36px rgba(0, 0, 0, 0.5);
-  --shadow-pop: 0 12px 40px rgba(52, 211, 153, 0.25);
+  --shadow-sm: 0 0 0 1px var(--border);
+  --shadow-md: 0 0 0 1px var(--border), 0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 0 0 1px var(--border), 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 6px 24px rgba(59, 130, 246, 0.25);
 
-  --ring: 0 0 0 4px rgba(52, 211, 153, 0.22);
+  --ring: 0 0 0 3px rgba(59, 130, 246, 0.22);
 }
 
 /* Auto dark when user prefers it AND no override set */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0E0E10;
-    --bg-elev: #16161A;
-    --surface: #1F1F24;
-    --surface-2: #25252B;
-    --border: #2A2A30;
-    --border-strong: #3A3A42;
-    --ink: #F0EDE6;
-    --ink-2: #A8A39A;
-    --ink-3: #6A655E;
-    --ink-on-accent: #0E0E10;
-    --accent: #34D399;
-    --accent-hover: #6EE7B7;
-    --accent-soft: rgba(52, 211, 153, 0.12);
-    --accent-2: #D4A24A;
-    --accent-2-soft: rgba(212, 162, 74, 0.14);
-    --positive: #34D399;
-    --positive-soft: rgba(52, 211, 153, 0.12);
+    --bg: #0C0C0E;
+    --bg-elev: #141416;
+    --surface: #1C1C20;
+    --surface-2: #232328;
+    --border: #2E2E36;
+    --border-strong: #44444E;
+    --ink: #F4F4F5;
+    --ink-2: #A1A1AA;
+    --ink-3: #71717A;
+    --ink-on-accent: #0C0C0E;
+    --accent: #3B82F6;
+    --accent-hover: #60A5FA;
+    --accent-soft: rgba(59, 130, 246, 0.12);
+    --accent-2: #FBBF24;
+    --accent-2-soft: rgba(251, 191, 36, 0.12);
+    --positive: #4ADE80;
+    --positive-soft: rgba(74, 222, 128, 0.12);
     --negative: #F87171;
     --negative-soft: rgba(248, 113, 113, 0.12);
-    --warning: #D4A24A;
-    --warning-soft: rgba(212, 162, 74, 0.14);
-    --info: #60A5FA;
-    --info-soft: rgba(96, 165, 250, 0.14);
-    --ai: #A78BFA;
-    --ai-soft: rgba(167, 139, 250, 0.14);
+    --warning: #FBBF24;
+    --warning-soft: rgba(251, 191, 36, 0.12);
+    --info: #3B82F6;
+    --info-soft: rgba(59, 130, 246, 0.12);
+    --ai: #C084FC;
+    --ai-soft: rgba(192, 132, 252, 0.12);
   }
 }
